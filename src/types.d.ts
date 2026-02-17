@@ -1,4 +1,6 @@
-declare module 'vault-sdk-dev';
+
+// Ensure this is treated as a module
+export {};
 
 declare global {
   interface Window {
@@ -7,3 +9,5 @@ declare global {
     process: any;
   }
 }
+
+declare module 'vault-sdk-dev';
