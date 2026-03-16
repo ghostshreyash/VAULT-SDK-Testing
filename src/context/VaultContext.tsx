@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
-import Vault from 'vault-sdk-dev';
+import Vault, { VaultError, ValidationError } from 'vault-sdk-dev';
 import { toast } from 'sonner';
 
 interface VaultConfig {
@@ -39,20 +39,43 @@ export const VaultProvider = ({ children }: { children: ReactNode }) => {
   const [isConnected, setIsConnected] = useState(false);
 
   const addLog = (type: LogEntry['type'], method: string, message: string, data?: any) => {
+    let displayData = data;
+    let displayMessage = message;
+
+    // If data is an error object, extract info
+    if (data instanceof ValidationError) {
+      displayMessage = `${message} (${data.message})`;
+      displayData = {
+        code: data.code,
+        param: data.param,
+        operation: data.operation
+      };
+    } else if (data instanceof VaultError) {
+      displayMessage = `${message} (${data.message})`;
+      displayData = {
+        code: data.code,
+        status: data.status,
+        operation: data.operation,
+        serverData: data.data
+      };
+    } else if (data instanceof Error) {
+        displayMessage = `${message} (${data.message})`;
+    }
+
     const newLog: LogEntry = {
       id: Math.random().toString(36).substring(7),
       timestamp: Date.now(),
       type,
       method,
-      message,
-      data,
+      message: displayMessage,
+      data: displayData,
     };
     setLogs((prev) => [newLog, ...prev]);
     
     if (type === 'error') {
-      toast.error(`${method}: ${message}`);
+      toast.error(`${method}: ${displayMessage}`);
     } else if (type === 'success') {
-      toast.success(`${method}: ${message}`);
+      toast.success(`${method}: ${displayMessage}`);
     }
   };
 
