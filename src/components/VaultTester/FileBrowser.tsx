@@ -13,6 +13,7 @@ interface FileItem {
   name: string;
   type: string; // 'folder' or 'file'
   parentId: string | null;
+  folderId?: string | null;
   isStarred?: boolean;
   size?: string;
   sizeBytes?: number;
