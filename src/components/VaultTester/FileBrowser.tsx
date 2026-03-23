@@ -1,6 +1,5 @@
 import { useState, useMemo } from "react";
 import { useVault } from "@/context/VaultContext";
-import crypto from "crypto";
 import axios from "axios";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -70,21 +69,28 @@ export function FileBrowser({ vaultId }: { vaultId: string }) {
     }
   };
 
+  const calculateFileHash = async (file: File): Promise<string> => {
+    const buffer = await file.arrayBuffer();
+    const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+  };
+
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length || !vault) return;
     const fileList = Array.from(e.target.files);
-    
+
+    // Reset the input so the same file can be re-uploaded if needed
+    e.target.value = "";
+
     try {
-        addLog("info", "upload", `Starting manual presigned upload for ${fileList.length} files...`);
-        
+        addLog("info", "upload", `Starting manual presigned upload for ${fileList.length} files with progress...`);
+
         for (const f of fileList) {
             addLog("info", "upload", `Processing ${f.name}...`);
-            const arrayBuffer = await f.arrayBuffer();
-            const buffer = new Uint8Array(arrayBuffer);
             
-            // Step 1: Compute SHA-256 Hash
-            // Note: crypto-browserify is used via Vite alias
-            const hash = crypto.createHash("sha256").update(buffer).digest("hex");
+            // Step 1: Compute SHA-256 Hash using native browser crypto
+            const hash = await calculateFileHash(f);
             addLog("info", "upload", `Computed hash for ${f.name}: ${hash}`);
 
             // Step 2: Get Presigned URL from SDK
@@ -93,38 +99,51 @@ export function FileBrowser({ vaultId }: { vaultId: string }) {
                 vaultId,
                 fileName: f.name,
                 fileType: f.type || "application/octet-stream",
-                fileSize: buffer.length,
+                fileSize: f.size,
                 contentHash: hash,
                 folderId: currentFolderId || null,
             });
-            
-            if (!presignedRes?.data) {
-                throw new Error(`Failed to get presigned URL for ${f.name}`);
-            }
 
-            const { url, key, contentType, sanitizedName } = presignedRes.data;
+            const presignedData = presignedRes?.data;
+            console.log("Presigned response:", presignedRes);
+
+            const { url, key, contentType, sanitizedName } = presignedData;
             addLog("success", "getPresignedUrl", `Received URL for ${f.name}`);
 
-            // Step 3: Upload directly to Storage (S3/Filebase) from the UI
+            // Step 3: Upload directly to Storage using fetch (not axios)
+            // to avoid any extra default headers that could break the S3 signature.
+            // Headers must match EXACTLY what was signed in the presigned URL.
             addLog("info", "storageUpload", `Uploading ${f.name} directly to storage...`);
-            await axios.put(url, buffer, {
-                headers: {
-                    "Content-Type": contentType,
-                    "x-amz-meta-original-filename": sanitizedName,
-                    "x-amz-meta-content-hash": hash,
-                    "x-amz-meta-user-id": vaultId,
-                    "x-amz-meta-folder-id": currentFolderId || "root",
-                    "x-amz-meta-file-size": buffer.length.toString(),
-                },
-                onUploadProgress: (progressEvent) => {
-                    if (progressEvent.total) {
-                        const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-                        if (percent % 25 === 0) {
-                            addLog("info", "storageProgress", `${f.name}: ${percent}%`);
-                        }
-                    }
-                }
+
+            // Extract metadata values from presigned URL query params to match signature
+            const presignedUrl = new URL(url);
+            const metaUserId = presignedUrl.searchParams.get("x-amz-meta-user-id") || "";
+            const metaFileSize = presignedUrl.searchParams.get("x-amz-meta-file-size") || f.size.toString();
+            const metaFolderId = presignedUrl.searchParams.get("x-amz-meta-folder-id") || currentFolderId || "root";
+            const metaOriginalFilename = presignedUrl.searchParams.get("x-amz-meta-original-filename") || sanitizedName || f.name;
+            const metaContentHash = presignedUrl.searchParams.get("x-amz-meta-content-hash") || hash;
+
+            const uploadHeaders: Record<string, string> = {
+                "Content-Type": contentType,
+                "x-amz-meta-original-filename": metaOriginalFilename,
+                "x-amz-meta-content-hash": metaContentHash,
+                "x-amz-meta-user-id": metaUserId,
+                "x-amz-meta-folder-id": metaFolderId,
+                "x-amz-meta-file-size": metaFileSize,
+            };
+            console.log("Upload headers:", uploadHeaders);
+
+            const uploadRes = await fetch(url, {
+                method: "PUT",
+                headers: uploadHeaders,
+                body: f,
             });
+
+            if (!uploadRes.ok) {
+                const errBody = await uploadRes.text().catch(() => "");
+                console.error("S3 upload error:", uploadRes.status, errBody);
+                throw new Error(`Storage upload failed: ${uploadRes.status} ${errBody}`);
+            }
             addLog("success", "storageUpload", `${f.name} uploaded to storage`);
 
             // Step 4: Register the upload with the backend via SDK
@@ -133,17 +152,17 @@ export function FileBrowser({ vaultId }: { vaultId: string }) {
                 vaultId,
                 fileName: f.name,
                 filebaseKey: key,
-                fileSize: buffer.length,
+                fileSize: f.size,
                 contentHash: hash,
                 folderId: currentFolderId || null,
             });
             addLog("success", "registerUpload", `${f.name} registered successfully`);
         }
-        
-        addLog("success", "upload", "All files uploaded successfully via direct storage access");
+
+        addLog("success", "upload", "Completed upload process");
         fetchFiles();
     } catch (error) {
-        addLog("error", "upload", "Manual upload flow failed", error);
+        addLog("error", "upload", "Upload flow failed", error);
     }
   };
 
@@ -167,12 +186,12 @@ export function FileBrowser({ vaultId }: { vaultId: string }) {
       const newName = prompt("Enter new name", item.name);
       if (!newName || newName === item.name) return;
       try {
-           addLog("info", "renameFile", `Renaming ${item.name} to ${newName}...`);
-           await vault.renameFile(vaultId, item.id, newName);
-           addLog("success", "renameFile", "Renamed successfully");
+           addLog("info", "renameItem", `Renaming ${item.name} to ${newName}...`);
+           await vault.renameItem(vaultId, item.id, newName);
+           addLog("success", "renameItem", "Renamed successfully");
            fetchFiles();
       } catch (error) {
-           addLog("error", "renameFile", "Rename failed", error);
+           addLog("error", "renameItem", "Rename failed", error);
       }
   };
 
