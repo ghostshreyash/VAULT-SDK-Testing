@@ -35,20 +35,29 @@ export function FileBrowser({ vaultId }: { vaultId: string }) {
     setLoading(true);
     try {
       const res = await vault.getAllFiles(vaultId);
-      // Resiliently handle different response structures
-      let items = [];
+      // Resiliently handle both old and new response structures.
+      let folders: FileItem[] = [];
+      let fileList: FileItem[] = [];
+
       if (Array.isArray(res)) {
-          items = res;
-      } else if (res?.data?.files && Array.isArray(res.data.files)) {
-          items = res.data.files;
-      } else if (res?.files && Array.isArray(res.files)) {
-          items = res.files;
+        fileList = res;
+      } else if (res?.data?.folders || res?.data?.files) {
+        folders = Array.isArray(res.data?.folders) ? res.data.folders : [];
+        fileList = Array.isArray(res.data?.files) ? res.data.files : [];
+      } else if (res?.folders || res?.files) {
+        folders = Array.isArray(res?.folders) ? res.folders : [];
+        fileList = Array.isArray(res?.files) ? res.files : [];
       } else if (res?.data && Array.isArray(res.data)) {
-          items = res.data;
+        fileList = res.data;
       }
 
+      const items = [...folders, ...fileList];
       setFiles(items);
-      addLog("success", "getAllFiles", `Fetched ${items.length} items`, items);
+      addLog("success", "getAllFiles", `Fetched ${items.length} items`, {
+        folders: folders.length,
+        files: fileList.length,
+        items,
+      });
     } catch (error) {
       addLog("error", "getAllFiles", "Failed to fetch files", error);
     } finally {
@@ -223,14 +232,18 @@ export function FileBrowser({ vaultId }: { vaultId: string }) {
     });
   }, [files, currentFolderId, searchQuery]);
 
-  const navigateTo = (folder: FileItem) => {
+  const navigateTo = async (folder: FileItem) => {
       setCurrentPath(prev => [...prev, { id: folder.id, name: folder.name }]);
       setSearchQuery("");
+      // Refetch on folder navigation to always show latest state.
+      await fetchFiles();
   };
 
-  const navigateUp = () => {
+  const navigateUp = async () => {
       if (currentPath.length > 1) {
           setCurrentPath(prev => prev.slice(0, -1));
+          // Refetch when moving back in the folder hierarchy.
+          await fetchFiles();
       }
   };
 
