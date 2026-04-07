@@ -312,6 +312,66 @@ export function StoragePanel({ vaultId }: { vaultId?: string }) {
     }
   };
 
+  const handleCreateUpcomingPlan = async (priceId: string) => {
+    if (!ensureReady()) {
+      return;
+    }
+
+    const normalizedPriceId = priceId.trim();
+    if (!normalizedPriceId) {
+      addLog("warning", "createUpcomingPlan", "Provide a price id to schedule an upcoming plan");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      addLog("info", "createUpcomingPlan", `Scheduling upcoming plan for ${normalizedPriceId}...`);
+      const response = await vault.createUpcomingPlan(activeVaultId, normalizedPriceId);
+      addLog("success", "createUpcomingPlan", "Upcoming plan scheduled", response);
+      await fetchSubscriptions();
+    } catch (error) {
+      addLog("error", "createUpcomingPlan", "Failed to schedule upcoming plan", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    if (!ensureReady()) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      addLog("info", "cancelSubscription", "Scheduling cancellation at period end...");
+      const response = await vault.cancelSubscription(activeVaultId);
+      addLog("success", "cancelSubscription", "Subscription cancellation scheduled", response);
+      await Promise.all([fetchStorage(), fetchSubscriptions()]);
+    } catch (error) {
+      addLog("error", "cancelSubscription", "Failed to cancel subscription", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelUpcomingPlan = async () => {
+    if (!ensureReady()) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      addLog("info", "cancelUpcomingPlan", "Cancelling upcoming plan auto-renewal...");
+      const response = await vault.cancelUpcomingPlan(activeVaultId);
+      addLog("success", "cancelUpcomingPlan", "Upcoming plan auto-renewal cancelled", response);
+      await fetchSubscriptions();
+    } catch (error) {
+      addLog("error", "cancelUpcomingPlan", "Failed to cancel upcoming plan", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (
       !checkoutOpen ||
@@ -380,7 +440,8 @@ export function StoragePanel({ vaultId }: { vaultId?: string }) {
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
           <div className="rounded-md border bg-muted/20 p-3 text-sm text-muted-foreground">
             Run this section to validate billing endpoints: `getStorageDetails`, `getAllPlans`,
-            `buyPlan`, and `getSubscriptions`.
+            `buyPlan`, `getSubscriptions`, `cancelSubscription`, `createUpcomingPlan`, and
+            `cancelUpcomingPlan`.
           </div>
           <Button
             onClick={() => {
@@ -475,6 +536,14 @@ export function StoragePanel({ vaultId }: { vaultId?: string }) {
                   Open Last Session
                 </Button>
               </div>
+              <Button
+                variant="outline"
+                onClick={() => void handleCreateUpcomingPlan(manualPriceId)}
+                disabled={!manualPriceId.trim() || loading}
+                className="w-full"
+              >
+                Schedule Upcoming (priceId)
+              </Button>
 
               {latestCheckoutResponse !== null && (
                 <pre className="max-h-44 overflow-auto rounded-md bg-slate-950 p-3 text-xs text-slate-100">
@@ -562,6 +631,17 @@ export function StoragePanel({ vaultId }: { vaultId?: string }) {
                           : "-"}
                       </p>
                     </CardContent>
+                    <CardFooter>
+                      <Button
+                        variant="outline"
+                        onClick={() => void handleCancelSubscription()}
+                        disabled={loading || Boolean(subscriptions.active.cancelAtPeriodEnd)}
+                      >
+                        {Boolean(subscriptions.active.cancelAtPeriodEnd)
+                          ? "Cancellation Scheduled"
+                          : "Cancel At Period End"}
+                      </Button>
+                    </CardFooter>
                   </Card>
                 )}
 
@@ -576,6 +656,17 @@ export function StoragePanel({ vaultId }: { vaultId?: string }) {
                         This plan starts after the current one expires.
                       </CardDescription>
                     </CardHeader>
+                    <CardFooter>
+                      <Button
+                        variant="outline"
+                        onClick={() => void handleCancelUpcomingPlan()}
+                        disabled={loading || Boolean(subscriptions.upcoming.cancelAtPeriodEnd)}
+                      >
+                        {Boolean(subscriptions.upcoming.cancelAtPeriodEnd)
+                          ? "Auto-Renew Already Cancelled"
+                          : "Cancel Upcoming Auto-Renew"}
+                      </Button>
+                    </CardFooter>
                   </Card>
                 )}
               </div>

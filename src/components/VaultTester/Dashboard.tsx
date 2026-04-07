@@ -47,7 +47,15 @@ const methodGroups = [
   },
   {
     title: "Storage and Billing",
-    methods: ["getStorageDetails", "getAllPlans", "buyPlan", "getSubscriptions"],
+    methods: [
+      "getStorageDetails",
+      "getAllPlans",
+      "buyPlan",
+      "getSubscriptions",
+      "cancelSubscription",
+      "createUpcomingPlan",
+      "cancelUpcomingPlan",
+    ],
   },
   {
     title: "Platform",
