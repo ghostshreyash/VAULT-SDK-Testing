@@ -9,9 +9,9 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      "events": "events",
-      "crypto": "crypto-browserify",
-      "stream": "stream-browserify",
+      "events": path.resolve(__dirname, "./node_modules/events/events.js"),
+      "crypto": path.resolve(__dirname, "./node_modules/crypto-browserify/index.js"),
+      "stream": path.resolve(__dirname, "./node_modules/stream-browserify/index.js"),
       "ws": path.resolve(__dirname, "./src/shims/ws.ts"),
       "buffer": "buffer",
     },
