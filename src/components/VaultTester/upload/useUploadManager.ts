@@ -27,6 +27,48 @@ async function sha256Hex(buffer: ArrayBuffer): Promise<string> {
     .join("");
 }
 
+// The backend wraps the payload as { success, message, data: {...} }. Some
+// builds return the inner object directly. Unwrap defensively.
+function unwrapPresigned(response: any): {
+  url?: string;
+  key?: string;
+  fileBaseKey?: string;
+  contentType?: string;
+  sanitizedName?: string;
+} {
+  if (response?.data && (response.data.url || response.data.key)) {
+    return response.data;
+  }
+  return response ?? {};
+}
+
+// SigV4 presigned URLs require that every header listed in X-Amz-SignedHeaders
+// is sent with exactly the value that was signed. Filebase embeds those values
+// in the URL's query string, so we read them straight back out — this avoids
+// signature mismatches from guessing header names (user-id vs vault-id) or
+// re-encoding values.
+function signedHeadersFromUrl(urlString: string): Record<string, string> {
+  const headers: Record<string, string> = {};
+  let parsed: URL;
+  try {
+    parsed = new URL(urlString);
+  } catch {
+    return headers;
+  }
+
+  const signed = (parsed.searchParams.get("X-Amz-SignedHeaders") ?? "").split(";");
+  for (const name of signed) {
+    if (!name || name === "host") continue;
+    const value = parsed.searchParams.get(name);
+    if (value !== null) headers[name] = value;
+  }
+
+  const contentType = parsed.searchParams.get("Content-Type");
+  if (contentType) headers["Content-Type"] = contentType;
+
+  return headers;
+}
+
 /**
  * Drives a vault-style upload experience: a concurrent queue of files, each
  * pushed through the SDK presigned-URL pipeline (getPresignedUrl -> PUT to
@@ -87,7 +129,7 @@ export function useUploadManager({
 
         // 2. Ask the SDK for a presigned upload URL.
         setStage(id, "presigning");
-        const presigned = await vault.getPresignedUrl({
+        const presignedResponse = await vault.getPresignedUrl({
           vaultId,
           fileName: file.name,
           fileType: file.type || "application/octet-stream",
@@ -96,24 +138,25 @@ export function useUploadManager({
           folderId: parentId,
         });
 
-        const { url, key, contentType, sanitizedName } = presigned;
+        const presigned = unwrapPresigned(presignedResponse);
+        const url = presigned.url;
+        const key = presigned.key ?? presigned.fileBaseKey;
+
+        if (!url) {
+          throw new Error(
+            "Presigned URL missing from getPresignedUrl response. " +
+              "Expected response.data.url."
+          );
+        }
 
         // 3. PUT the file straight to storage with live byte progress.
+        // Send back exactly the headers the URL was signed with.
         setStage(id, "uploading");
         const source = axios.CancelToken.source();
         cancelSources.current.set(id, source);
 
         await axios.put(url, file, {
-          headers: {
-            "Content-Type": contentType,
-            "x-amz-meta-original-filename": encodeURIComponent(
-              sanitizedName || file.name
-            ),
-            "x-amz-meta-content-hash": hash,
-            "x-amz-meta-vault-id": vaultId,
-            "x-amz-meta-folder-id": parentId || "root",
-            "x-amz-meta-file-size": size.toString(),
-          },
+          headers: signedHeadersFromUrl(url),
           cancelToken: source.token,
           onUploadProgress: (event) => {
             const total = event.total ?? size;
