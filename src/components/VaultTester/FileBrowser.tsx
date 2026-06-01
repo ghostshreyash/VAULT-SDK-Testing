@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/select";
 import {
   ArrowLeft,
+  CloudUpload,
   Edit2,
   File,
   Folder,
@@ -35,8 +36,10 @@ import {
   Search,
   Star,
   Trash2,
-  Upload,
 } from "lucide-react";
+import { useUploadManager } from "./upload/useUploadManager";
+import { UploadDialog } from "./upload/UploadDialog";
+import { UploadToast } from "./upload/UploadToast";
 
 interface FileItem {
   id: string;
@@ -153,7 +156,7 @@ export function FileBrowser({ vaultId }: { vaultId: string }) {
   const [serverResults, setServerResults] = useState<FileItem[]>([]);
   const [starredFiles, setStarredFiles] = useState<FileItem[]>([]);
   const [mediaData, setMediaData] = useState<unknown>(null);
-  const [uploadResult, setUploadResult] = useState<unknown>(null);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [apiSearchQuery, setApiSearchQuery] = useState("");
@@ -169,6 +172,19 @@ export function FileBrowser({ vaultId }: { vaultId: string }) {
   const setLoading = (key: string, value: boolean) => {
     setLoadingMap((prev) => ({ ...prev, [key]: value }));
   };
+
+  const upload = useUploadManager({
+    vault,
+    vaultId: activeVaultId,
+    addLog,
+    // Refresh the listing once a batch of uploads finishes.
+    onUploaded: () => {
+      void fetchAllFiles();
+    },
+  });
+
+  const currentFolderName =
+    currentPath[currentPath.length - 1]?.name ?? "Root";
 
   const ensureReady = () => {
     if (!vault) {
@@ -306,77 +322,18 @@ export function FileBrowser({ vaultId }: { vaultId: string }) {
     }
   };
 
-  const toSdkFile = async (file: File) => {
-    const arrayBuffer = await file.arrayBuffer();
-    return {
-      buffer: new Uint8Array(arrayBuffer),
-      name: file.name,
-      type: file.type || "application/octet-stream",
-    };
-  };
-
-  const handleSingleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = event.target.files?.[0];
-    event.target.value = "";
-
-    if (!selectedFile || !ensureReady()) {
+  // Hand files to the upload manager, which runs each through the vault SDK
+  // presigned-URL pipeline with a concurrent queue and live progress.
+  const handleSelectedFiles = (files: File[]) => {
+    if (!ensureReady()) {
       return;
     }
-
-    setLoading("uploadFile", true);
-    try {
-      const sdkFile = await toSdkFile(selectedFile);
-      const parentId = resolveOperationParentId();
-      addLog("info", "uploadFile", `Uploading ${selectedFile.name}...`, {
-        parentId: parentId ?? "root",
-      });
-      const response = await vault.uploadFile(sdkFile, activeVaultId, parentId);
-      setUploadResult(response);
-      addLog("success", "uploadFile", `${selectedFile.name} uploaded successfully`, response);
-      await fetchAllFiles();
-    } catch (error) {
-      addLog("error", "uploadFile", "Single upload failed", error);
-    } finally {
-      setLoading("uploadFile", false);
-    }
+    upload.enqueue(files, resolveOperationParentId());
   };
 
-  const handleBatchUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = Array.from(event.target.files ?? []);
-    event.target.value = "";
-
-    if (!selectedFiles.length || !ensureReady()) {
-      return;
-    }
-
-    setLoading("uploadFiles", true);
-    try {
-      const sdkFiles = await Promise.all(selectedFiles.map((file) => toSdkFile(file)));
-      const parentId = resolveOperationParentId();
-      addLog("info", "uploadFiles", `Uploading ${selectedFiles.length} files...`, {
-        parentId: parentId ?? "root",
-      });
-      const response = await vault.uploadFiles(sdkFiles, activeVaultId, parentId);
-      setUploadResult(response);
-
-      const normalizedResponse = Array.isArray(response) ? response : [];
-      const failures = normalizedResponse.filter(
-        (entry) => isRecord(entry) && entry.status === "failed"
-      ).length;
-      const successes = normalizedResponse.length - failures;
-
-      addLog(
-        "success",
-        "uploadFiles",
-        `Batch upload completed (${successes} success, ${failures} failed)`,
-        response
-      );
-      await fetchAllFiles();
-    } catch (error) {
-      addLog("error", "uploadFiles", "Batch upload failed", error);
-    } finally {
-      setLoading("uploadFiles", false);
-    }
+  const handleTabDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    handleSelectedFiles(Array.from(event.dataTransfer.files ?? []));
   };
 
   const handleDelete = async (item: FileItem) => {
@@ -588,6 +545,7 @@ export function FileBrowser({ vaultId }: { vaultId: string }) {
   );
 
   return (
+    <>
     <Card className="h-full border-slate-200/70 bg-white/90 shadow-sm">
       <CardHeader className="space-y-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -741,43 +699,111 @@ export function FileBrowser({ vaultId }: { vaultId: string }) {
           </TabsContent>
 
           <TabsContent value="uploads" className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto]">
-              <Input
-                placeholder="Optional parent folder ID override (default: current folder)"
-                value={manualParentId}
-                onChange={(e) => setManualParentId(e.target.value)}
-              />
-              <Button variant="outline" className="relative">
-                <Upload className="mr-2 h-4 w-4" />
-                uploadFile
-                <input
-                  type="file"
-                  className="absolute inset-0 cursor-pointer opacity-0"
-                  onChange={handleSingleUpload}
-                />
-              </Button>
-              <Button variant="secondary" className="relative">
-                <Upload className="mr-2 h-4 w-4" />
-                uploadFiles
-                <input
-                  type="file"
-                  multiple
-                  className="absolute inset-0 cursor-pointer opacity-0"
-                  onChange={handleBatchUpload}
-                />
-              </Button>
+            <Input
+              placeholder="Optional parent folder ID override (default: current folder)"
+              value={manualParentId}
+              onChange={(e) => setManualParentId(e.target.value)}
+            />
+
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => setUploadDialogOpen(true)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") setUploadDialogOpen(true);
+              }}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={handleTabDrop}
+              className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300 p-8 text-center transition-colors hover:border-cyan-500 hover:bg-slate-50"
+            >
+              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-cyan-100">
+                <CloudUpload className="h-6 w-6 text-cyan-600" />
+              </div>
+              <p className="mt-3 text-sm font-medium text-slate-700">
+                Drag and drop files here, or click to browse
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Destination: {manualParentId.trim() || currentFolderName} · uploaded
+                via SDK presigned-URL flow with live progress
+              </p>
             </div>
 
-            <div className="rounded-md border bg-slate-950 p-3">
-              <pre className="max-h-80 overflow-auto text-xs text-slate-100">
-                {uploadResult
-                  ? JSON.stringify(uploadResult, null, 2)
-                  : "No upload result yet. Use uploadFile or uploadFiles."}
-              </pre>
+            <div className="flex items-center gap-2">
+              <Button onClick={() => setUploadDialogOpen(true)}>
+                <CloudUpload className="mr-2 h-4 w-4" />
+                Upload files
+              </Button>
+              {upload.items.length > 0 && (
+                <Button
+                  variant="outline"
+                  onClick={() => upload.setToastOpen(true)}
+                  disabled={upload.toastOpen}
+                >
+                  Show upload status
+                </Button>
+              )}
             </div>
+
+            {upload.items.length > 0 && (
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>File</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Progress</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {upload.items.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-medium">{item.file.name}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              item.status === "success"
+                                ? "default"
+                                : item.status === "error"
+                                  ? "destructive"
+                                  : "secondary"
+                            }
+                          >
+                            {item.status}
+                          </Badge>
+                          {item.error && (
+                            <span className="ml-2 text-xs text-red-500">{item.error}</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {item.status === "success" ? "100%" : `${item.progress}%`}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       </CardContent>
     </Card>
+
+    <UploadDialog
+      open={uploadDialogOpen}
+      onOpenChange={setUploadDialogOpen}
+      onFiles={handleSelectedFiles}
+      destinationLabel={manualParentId.trim() || currentFolderName}
+    />
+
+    <UploadToast
+      open={upload.toastOpen}
+      items={upload.items}
+      isUploading={upload.isUploading}
+      counts={upload.counts}
+      onCancel={upload.cancel}
+      onClearCompleted={upload.clearCompleted}
+      onClose={upload.closeToast}
+    />
+    </>
   );
 }
