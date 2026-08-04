@@ -1,6 +1,7 @@
 ﻿import { useEffect, useRef, useState } from "react";
 import { loadStripe, type StripeEmbeddedCheckout } from "@stripe/stripe-js";
 import { useVault } from "@/context/VaultContext";
+import { useSettingsStore } from "@/store/settingsStore";
 import {
   Card,
   CardContent,
@@ -38,7 +39,6 @@ interface SubscriptionsState {
   upcoming?: Record<string, unknown>;
 }
 
-const STRIPE_PK_STORAGE_KEY = "vault-sdk-tester-stripe-pk";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -49,17 +49,6 @@ function extractPayload(response: unknown): unknown {
     return response.data;
   }
   return response;
-}
-
-function getInitialStripePublishableKey() {
-  const fromEnv = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY ?? "";
-
-  if (typeof window === "undefined") {
-    return fromEnv;
-  }
-
-  const fromStorage = window.localStorage.getItem(STRIPE_PK_STORAGE_KEY);
-  return fromStorage || fromEnv;
 }
 
 function readStringField(value: unknown, field: string): string | null {
@@ -121,17 +110,22 @@ function extractCheckoutUrl(response: unknown): string | null {
   return null;
 }
 
-export function StoragePanel({ vaultId }: { vaultId?: string }) {
+export function StoragePanel() {
   const { vault, isConnected, addLog } = useVault();
+  const vaultId = useSettingsStore((state) => state.vaultId);
+  const stripePublishableKey = useSettingsStore(
+    (state) => state.stripePublishableKey
+  );
+  const setStripePublishableKey = useSettingsStore(
+    (state) => state.setStripePublishableKey
+  );
+
   const [loading, setLoading] = useState(false);
   const [plans, setPlans] = useState<PlanItem[]>([]);
   const [storage, setStorage] = useState<Record<string, unknown> | null>(null);
   const [subscriptions, setSubscriptions] = useState<SubscriptionsState | null>(null);
   const [manualPriceId, setManualPriceId] = useState("");
 
-  const [stripePublishableKey, setStripePublishableKey] = useState(
-    getInitialStripePublishableKey
-  );
   const [latestCheckoutResponse, setLatestCheckoutResponse] = useState<unknown | null>(null);
   const [checkoutClientSecret, setCheckoutClientSecret] = useState("");
   const [checkoutOpen, setCheckoutOpen] = useState(false);
@@ -142,7 +136,7 @@ export function StoragePanel({ vaultId }: { vaultId?: string }) {
 
   const embeddedCheckoutRef = useRef<StripeEmbeddedCheckout | null>(null);
 
-  const activeVaultId = vaultId?.trim() ?? "";
+  const activeVaultId = vaultId.trim();
 
   const ensureReady = () => {
     if (!vault) {
@@ -227,14 +221,6 @@ export function StoragePanel({ vaultId }: { vaultId?: string }) {
       addLog("error", "getSubscriptions", "Failed to fetch subscriptions", error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const saveStripePublishableKey = (value: string) => {
-    setStripePublishableKey(value);
-
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(STRIPE_PK_STORAGE_KEY, value);
     }
   };
 
@@ -507,7 +493,7 @@ export function StoragePanel({ vaultId }: { vaultId?: string }) {
                 <Input
                   placeholder="pk_test_..."
                   value={stripePublishableKey}
-                  onChange={(e) => saveStripePublishableKey(e.target.value)}
+                  onChange={(e) => setStripePublishableKey(e.target.value)}
                 />
               </div>
 

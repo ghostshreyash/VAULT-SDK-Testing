@@ -28,22 +28,22 @@ export function UserManagement() {
   const handleCreateUser = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!vault) {
-      addLog("warning", "createPlatformUser", "Initialize SDK before creating users");
+      addLog("warning", "createVault", "Initialize SDK before creating users");
       return;
     }
 
     setLoading(true);
     try {
       const normalizedPlatformId = createUserPlatformId.trim();
-      addLog("info", "createPlatformUser", `Creating user ${createUserEmail}...`);
-      const response = await vault.createPlatformUser(
+      addLog("info", "createVault", `Creating vault for ${createUserEmail}...`);
+      const response = await vault.createVault(
         createUserEmail,
         normalizedPlatformId || undefined
       );
       setCreateUserResult(response);
-      addLog("success", "createPlatformUser", "Platform user created", response);
+      addLog("success", "createVault", "Vault created for user", response);
     } catch (error) {
-      addLog("error", "createPlatformUser", "Failed to create platform user", error);
+      addLog("error", "createVault", "Failed to create vault", error);
     } finally {
       setLoading(false);
     }
@@ -76,21 +76,23 @@ export function UserManagement() {
   return (
     <div className="space-y-6">
       <div className="rounded-md border bg-muted/20 p-3 text-sm text-muted-foreground">
-        Test platform onboarding methods here: `createPlatformUser` and `importVault`.
+        Test platform onboarding methods here: `createVault` and `importVault`.
       </div>
 
       <Tabs defaultValue="create-user">
         <TabsList>
-          <TabsTrigger value="create-user">Create Platform User</TabsTrigger>
+          <TabsTrigger value="create-user">Create Vault</TabsTrigger>
           <TabsTrigger value="import-vault">Import Vault</TabsTrigger>
         </TabsList>
 
         <TabsContent value="create-user" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Create Platform User</CardTitle>
+              <CardTitle>Create Vault</CardTitle>
               <CardDescription>
-                Runs `createPlatformUser(email, platformId?)`. Platform ID is optional.
+                Runs `createVault(email, platformId?)`. Platform ID is optional — omit it
+                for a platform-less SDK user. Idempotent: an existing user is linked to
+                your client and returned rather than erroring.
               </CardDescription>
             </CardHeader>
             <form onSubmit={handleCreateUser}>
@@ -117,7 +119,7 @@ export function UserManagement() {
               </CardContent>
               <CardFooter>
                 <Button type="submit" disabled={loading}>
-                  {loading ? "Creating..." : "Run createPlatformUser"}
+                  {loading ? "Creating..." : "Run createVault"}
                 </Button>
               </CardFooter>
             </form>

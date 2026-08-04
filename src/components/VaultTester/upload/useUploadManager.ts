@@ -1,10 +1,29 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import axios, { type CancelTokenSource } from "axios";
 import type { LogEntry } from "@/context/VaultContext";
-import type { UploadItem, UploadStatus, UploadStage } from "./types";
+import type { UploadItem, UploadMode, UploadStatus } from "./types";
+
+interface BatchUploadResult {
+  status: "success" | "failed";
+  fileName: string;
+  error?: string;
+  code?: string;
+}
+
+interface UploadCapableVault {
+  uploadFile: (
+    file: File,
+    vaultId: string,
+    parentId?: string | null
+  ) => Promise<unknown>;
+  uploadFiles: (
+    files: File[],
+    vaultId: string,
+    parentId?: string | null
+  ) => Promise<BatchUploadResult[]>;
+}
 
 interface UseUploadManagerArgs {
-  vault: any | null;
+  vault: UploadCapableVault | null;
   vaultId: string;
   addLog: (
     type: LogEntry["type"],
@@ -20,61 +39,8 @@ interface UseUploadManagerArgs {
 
 const TERMINAL: UploadStatus[] = ["success", "error", "cancelled"];
 
-async function sha256Hex(buffer: ArrayBuffer): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", buffer);
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
+const MAX_FILE_SIZE = 10 * 1024 * 1024 * 1024;
 
-// The backend wraps the payload as { success, message, data: {...} }. Some
-// builds return the inner object directly. Unwrap defensively.
-function unwrapPresigned(response: any): {
-  url?: string;
-  key?: string;
-  fileBaseKey?: string;
-  contentType?: string;
-  sanitizedName?: string;
-} {
-  if (response?.data && (response.data.url || response.data.key)) {
-    return response.data;
-  }
-  return response ?? {};
-}
-
-// SigV4 presigned URLs require that every header listed in X-Amz-SignedHeaders
-// is sent with exactly the value that was signed. Filebase embeds those values
-// in the URL's query string, so we read them straight back out — this avoids
-// signature mismatches from guessing header names (user-id vs vault-id) or
-// re-encoding values.
-function signedHeadersFromUrl(urlString: string): Record<string, string> {
-  const headers: Record<string, string> = {};
-  let parsed: URL;
-  try {
-    parsed = new URL(urlString);
-  } catch {
-    return headers;
-  }
-
-  const signed = (parsed.searchParams.get("X-Amz-SignedHeaders") ?? "").split(";");
-  for (const name of signed) {
-    if (!name || name === "host") continue;
-    const value = parsed.searchParams.get(name);
-    if (value !== null) headers[name] = value;
-  }
-
-  const contentType = parsed.searchParams.get("Content-Type");
-  if (contentType) headers["Content-Type"] = contentType;
-
-  return headers;
-}
-
-/**
- * Drives a vault-style upload experience: a concurrent queue of files, each
- * pushed through the SDK presigned-URL pipeline (getPresignedUrl -> PUT to
- * storage with live byte progress -> registerUpload), with per-file status,
- * progress and cancellation.
- */
 export function useUploadManager({
   vault,
   vaultId,
@@ -86,32 +52,25 @@ export function useUploadManager({
   const [items, setItems] = useState<UploadItem[]>([]);
   const [queueIds, setQueueIds] = useState<string[]>([]);
   const [activeIds, setActiveIds] = useState<Set<string>>(new Set());
+  const [batchRunning, setBatchRunning] = useState(0);
   const [toastOpen, setToastOpen] = useState(false);
 
   // Latest items snapshot for use inside async upload routines.
   const itemsRef = useRef<UploadItem[]>(items);
   itemsRef.current = items;
 
-  const cancelSources = useRef<Map<string, CancelTokenSource>>(new Map());
+  const abandoned = useRef<Set<string>>(new Set());
   const idCounter = useRef(0);
 
   // Keep onUploaded fresh without re-triggering the queue/drain effects.
   const onUploadedRef = useRef(onUploaded);
   onUploadedRef.current = onUploaded;
 
-  const updateItem = useCallback(
-    (id: string, patch: Partial<UploadItem>) => {
-      setItems((prev) =>
-        prev.map((it) => (it.id === id ? { ...it, ...patch } : it))
-      );
-    },
-    []
-  );
-
-  const setStage = useCallback(
-    (id: string, stage: UploadStage) => updateItem(id, { stage }),
-    [updateItem]
-  );
+  const updateItem = useCallback((id: string, patch: Partial<UploadItem>) => {
+    setItems((prev) =>
+      prev.map((it) => (it.id === id ? { ...it, ...patch } : it))
+    );
+  }, []);
 
   const runUpload = useCallback(
     async (id: string) => {
@@ -119,84 +78,35 @@ export function useUploadManager({
       if (!item || !vault) return;
 
       const { file, parentId } = item;
-      updateItem(id, { status: "uploading", stage: "hashing", error: undefined });
+      updateItem(id, { status: "uploading", error: undefined });
 
       try {
-        // 1. Hash the file contents (SHA-256), as the vault SDK does.
-        const arrayBuffer = await file.arrayBuffer();
-        const hash = await sha256Hex(arrayBuffer);
-        const size = file.size;
+        const result = await vault.uploadFile(file, vaultId, parentId);
 
-        // 2. Ask the SDK for a presigned upload URL.
-        setStage(id, "presigning");
-        const presignedResponse = await vault.getPresignedUrl({
-          vaultId,
-          fileName: file.name,
-          fileType: file.type || "application/octet-stream",
-          fileSize: size,
-          contentHash: hash,
-          folderId: parentId,
-        });
+        if (abandoned.current.has(id)) return;
 
-        const presigned = unwrapPresigned(presignedResponse);
-        const url = presigned.url;
-        const key = presigned.key ?? presigned.fileBaseKey;
+        updateItem(id, { status: "success", progress: 100, result });
+        addLog(
+          "success",
+          "uploadFile",
+          `${file.name} uploaded successfully`,
+          result
+        );
+      } catch (error) {
+        if (abandoned.current.has(id)) return;
 
-        if (!url) {
-          throw new Error(
-            "Presigned URL missing from getPresignedUrl response. " +
-              "Expected response.data.url."
-          );
-        }
-
-        // 3. PUT the file straight to storage with live byte progress.
-        // Send back exactly the headers the URL was signed with.
-        setStage(id, "uploading");
-        const source = axios.CancelToken.source();
-        cancelSources.current.set(id, source);
-
-        await axios.put(url, file, {
-          headers: signedHeadersFromUrl(url),
-          cancelToken: source.token,
-          onUploadProgress: (event) => {
-            const total = event.total ?? size;
-            const percent = total
-              ? Math.min(100, Math.round((event.loaded * 100) / total))
-              : 0;
-            updateItem(id, { progress: percent });
-          },
-        });
-
-        // 4. Register the completed upload with the vault backend.
-        setStage(id, "registering");
-        const result = await vault.registerUpload({
-          vaultId,
-          fileName: file.name,
-          filebaseKey: key,
-          fileSize: size,
-          contentHash: hash,
-          folderId: parentId,
-        });
+        const message =
+          (error as { message?: string })?.message ?? "Upload failed";
+        const code = (error as { code?: string })?.code;
 
         updateItem(id, {
-          status: "success",
-          stage: "done",
-          progress: 100,
-          result,
+          status: "error",
+          progress: 0,
+          error: code ? `[${code}] ${message}` : message,
         });
-        addLog("success", "uploadFile", `${file.name} uploaded successfully`, result);
-      } catch (error) {
-        if (axios.isCancel(error)) {
-          updateItem(id, { status: "cancelled", stage: "done" });
-          addLog("warning", "uploadFile", `${file.name} upload cancelled`);
-        } else {
-          const message =
-            (error as { message?: string })?.message ?? "Upload failed";
-          updateItem(id, { status: "error", stage: "done", error: message });
-          addLog("error", "uploadFile", `${file.name} upload failed`, error);
-        }
+        addLog("error", "uploadFile", `${file.name} upload failed`, error);
       } finally {
-        cancelSources.current.delete(id);
+        abandoned.current.delete(id);
         setActiveIds((prev) => {
           const next = new Set(prev);
           next.delete(id);
@@ -204,7 +114,7 @@ export function useUploadManager({
         });
       }
     },
-    [vault, vaultId, addLog, updateItem, setStage]
+    [vault, vaultId, addLog, updateItem]
   );
 
   // Pump the queue: start uploads until the concurrency budget is full.
@@ -225,29 +135,134 @@ export function useUploadManager({
     toStart.forEach((id) => void runUpload(id));
   }, [queueIds, activeIds, concurrency, runUpload]);
 
+  const runBatch = useCallback(
+    async (batchItems: UploadItem[]) => {
+      if (!vault || batchItems.length === 0) return;
+
+      const ids = batchItems.map((it) => it.id);
+      setBatchRunning((n) => n + 1);
+      setItems((prev) =>
+        prev.map((it) =>
+          ids.includes(it.id)
+            ? { ...it, status: "uploading", error: undefined }
+            : it
+        )
+      );
+
+      try {
+        const results = await vault.uploadFiles(
+          batchItems.map((it) => it.file),
+          vaultId,
+          batchItems[0].parentId
+        );
+
+        setItems((prev) =>
+          prev.map((it) => {
+            const index = ids.indexOf(it.id);
+            if (index === -1) return it;
+            if (it.status === "cancelled") return it;
+
+            const result = results?.[index];
+            if (result?.status === "success") {
+              return { ...it, status: "success", progress: 100, result };
+            }
+
+            const message = result?.error ?? "Upload failed";
+            return {
+              ...it,
+              status: "error",
+              progress: 0,
+              error: result?.code ? `[${result.code}] ${message}` : message,
+              result,
+            };
+          })
+        );
+
+        const failed = (results ?? []).filter((r) => r?.status !== "success");
+        if (failed.length === 0) {
+          addLog(
+            "success",
+            "uploadFiles",
+            `All ${batchItems.length} file(s) uploaded`,
+            results
+          );
+        } else {
+          addLog(
+            "warning",
+            "uploadFiles",
+            `${failed.length} of ${batchItems.length} file(s) failed`,
+            results
+          );
+        }
+      } catch (error) {
+        const message =
+          (error as { message?: string })?.message ?? "Batch upload failed";
+        setItems((prev) =>
+          prev.map((it) =>
+            ids.includes(it.id) && it.status !== "cancelled"
+              ? { ...it, status: "error", progress: 0, error: message }
+              : it
+          )
+        );
+        addLog("error", "uploadFiles", "Batch upload failed", error);
+      } finally {
+        ids.forEach((id) => abandoned.current.delete(id));
+        setBatchRunning((n) => n - 1);
+      }
+    },
+    [vault, vaultId, addLog]
+  );
+
   // Fire onUploaded once when an active batch fully drains.
   const wasBusy = useRef(false);
   useEffect(() => {
-    const busy = activeIds.size > 0 || queueIds.length > 0;
+    const busy = activeIds.size > 0 || queueIds.length > 0 || batchRunning > 0;
     if (wasBusy.current && !busy) {
       onUploadedRef.current?.();
     }
     wasBusy.current = busy;
-  }, [activeIds, queueIds]);
+  }, [activeIds, queueIds, batchRunning]);
 
   const enqueue = useCallback(
-    (files: File[], parentId: string | null): boolean => {
+    (
+      files: File[],
+      parentId: string | null,
+      mode: UploadMode = "single"
+    ): boolean => {
       if (files.length === 0) return false;
       if (files.length > maxFilesPerBatch) {
         addLog(
           "warning",
-          "uploadFiles",
+          mode === "batch" ? "uploadFiles" : "uploadFile",
           `You can only upload ${maxFilesPerBatch} files at a time`
         );
         return false;
       }
 
-      const newItems: UploadItem[] = files.map((file) => {
+      const accepted: File[] = [];
+      for (const file of files) {
+        if (file.size === 0) {
+          addLog(
+            "warning",
+            "uploadFile",
+            `${file.name} is empty (0 bytes) and cannot be uploaded`
+          );
+          continue;
+        }
+        if (file.size > MAX_FILE_SIZE) {
+          addLog(
+            "warning",
+            "uploadFile",
+            `${file.name} exceeds the 10 GB maximum upload size`
+          );
+          continue;
+        }
+        accepted.push(file);
+      }
+
+      if (accepted.length === 0) return false;
+
+      const newItems: UploadItem[] = accepted.map((file) => {
         idCounter.current += 1;
         return {
           id: `upload-${idCounter.current}`,
@@ -255,36 +270,54 @@ export function useUploadManager({
           parentId,
           progress: 0,
           status: "pending",
-          stage: "queued",
         };
       });
 
       setItems((prev) => [...prev, ...newItems]);
-      setQueueIds((prev) => [...prev, ...newItems.map((it) => it.id)]);
       setToastOpen(true);
-      addLog(
-        "info",
-        "uploadFiles",
-        `Queued ${files.length} file(s) for upload`,
-        { parentId: parentId ?? "root" }
-      );
+
+      if (mode === "batch") {
+        addLog(
+          "info",
+          "uploadFiles",
+          `Uploading ${accepted.length} file(s) in a single uploadFiles() call`,
+          { parentId: parentId ?? "root" }
+        );
+        void runBatch(newItems);
+      } else {
+        setQueueIds((prev) => [...prev, ...newItems.map((it) => it.id)]);
+        addLog(
+          "info",
+          "uploadFile",
+          `Queued ${accepted.length} file(s) for upload`,
+          { parentId: parentId ?? "root" }
+        );
+      }
+
       return true;
     },
-    [addLog, maxFilesPerBatch]
+    [addLog, maxFilesPerBatch, runBatch]
   );
 
   const cancel = useCallback((id: string) => {
-    const source = cancelSources.current.get(id);
-    if (source) {
-      source.cancel("Upload cancelled by user");
-      return;
+    const item = itemsRef.current.find((it) => it.id === id);
+    if (!item || TERMINAL.includes(item.status)) return;
+
+    if (item.status === "uploading") {
+      abandoned.current.add(id);
+      setActiveIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    } else {
+      setQueueIds((prev) => prev.filter((qid) => qid !== id));
     }
-    // Not yet active — drop it from the queue and mark cancelled.
-    setQueueIds((prev) => prev.filter((qid) => qid !== id));
+
     setItems((prev) =>
       prev.map((it) =>
         it.id === id && !TERMINAL.includes(it.status)
-          ? { ...it, status: "cancelled", stage: "done" }
+          ? { ...it, status: "cancelled" }
           : it
       )
     );
@@ -296,7 +329,8 @@ export function useUploadManager({
 
   const closeToast = useCallback(() => setToastOpen(false), []);
 
-  const isUploading = activeIds.size > 0 || queueIds.length > 0;
+  const isUploading =
+    activeIds.size > 0 || queueIds.length > 0 || batchRunning > 0;
 
   const counts = useMemo(() => {
     const total = items.length;

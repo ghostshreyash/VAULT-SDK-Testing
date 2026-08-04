@@ -13,6 +13,7 @@ export default defineConfig({
       "crypto": path.resolve(__dirname, "./node_modules/crypto-browserify/index.js"),
       "stream": path.resolve(__dirname, "./node_modules/stream-browserify/index.js"),
       "ws": path.resolve(__dirname, "./src/shims/ws.ts"),
+      "fs": path.resolve(__dirname, "./src/shims/fs.ts"),
       "buffer": "buffer",
     },
   },

@@ -142,3 +142,12 @@
     font-family: "JetBrains Mono", "Cascadia Mono", "Consolas", monospace;
   }
 }
+
+@keyframes upload-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}

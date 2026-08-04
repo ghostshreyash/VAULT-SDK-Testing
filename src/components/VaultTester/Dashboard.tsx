@@ -16,6 +16,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useSettingsStore } from "@/store/settingsStore";
 import {
   Boxes,
   FolderOpen,
@@ -29,7 +30,7 @@ import {
 
 const methodGroups = [
   {
-    title: "File, Search and Media",
+    title: "Files and Search",
     methods: [
       "uploadFile",
       "uploadFiles",
@@ -42,7 +43,6 @@ const methodGroups = [
       "deleteFolder",
       "addToStarred",
       "getStarredFiles",
-      "getMedia",
     ],
   },
   {
@@ -59,7 +59,7 @@ const methodGroups = [
   },
   {
     title: "Platform",
-    methods: ["createPlatformUser", "importVault"],
+    methods: ["createVault", "importVault"],
   },
   {
     title: "Connection",
@@ -69,7 +69,8 @@ const methodGroups = [
 
 export function Dashboard() {
   const { isConnected, wsConnected, disconnect } = useVault();
-  const [vaultId, setVaultId] = useState("");
+  const vaultId = useSettingsStore((state) => state.vaultId);
+  const setVaultId = useSettingsStore((state) => state.setVaultId);
   const [showLogs, setShowLogs] = useState(true);
   const [activeView, setActiveView] = useState<"files" | "storage" | "users" | "settings">(
     "files"
@@ -101,7 +102,7 @@ export function Dashboard() {
             <CardContent className="space-y-5">
               <p className="text-sm text-muted-foreground">
                 The UI is grouped by test intent so teams can validate file flows, plans,
-                users, media, and WebSocket behavior with less switching and cleaner logs.
+                users, and WebSocket behavior with less switching and cleaner logs.
               </p>
               <div className="grid gap-3 md:grid-cols-2">
                 {methodGroups.map((group) => (
@@ -216,7 +217,7 @@ export function Dashboard() {
           <TabsList className="grid w-full grid-cols-2 gap-1 md:grid-cols-4">
             <TabsTrigger value="files">
               <FolderOpen className="mr-2 h-4 w-4" />
-              File and Media
+              Files
             </TabsTrigger>
             <TabsTrigger value="storage">Storage and Plans</TabsTrigger>
             <TabsTrigger value="users">
@@ -230,11 +231,11 @@ export function Dashboard() {
           </TabsList>
 
           <TabsContent value="files" className="mt-4">
-            {renderPanelWithLogs(<FileBrowser vaultId={vaultId} />)}
+            {renderPanelWithLogs(<FileBrowser />)}
           </TabsContent>
 
           <TabsContent value="storage" className="mt-4">
-            {renderPanelWithLogs(<StoragePanel vaultId={vaultId} />)}
+            {renderPanelWithLogs(<StoragePanel />)}
           </TabsContent>
 
           <TabsContent value="users" className="mt-4">

@@ -40,6 +40,8 @@ import {
 import { useUploadManager } from "./upload/useUploadManager";
 import { UploadDialog } from "./upload/UploadDialog";
 import { UploadToast } from "./upload/UploadToast";
+import type { UploadMode } from "./upload/types";
+import { useSettingsStore } from "@/store/settingsStore";
 
 interface FileItem {
   id: string;
@@ -128,34 +130,38 @@ function isFolder(item: FileItem): boolean {
   return item.type.toLowerCase() === "folder";
 }
 
+function formatBytes(bytes: number): string {
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${value.toFixed(unitIndex === 0 ? 0 : 2)} ${units[unitIndex]}`;
+}
+
 function formatSize(item: FileItem): string {
   if (item.size) {
     return item.size;
   }
 
   if (typeof item.sizeBytes === "number") {
-    const units = ["B", "KB", "MB", "GB", "TB"];
-    let value = item.sizeBytes;
-    let unitIndex = 0;
-    while (value >= 1024 && unitIndex < units.length - 1) {
-      value /= 1024;
-      unitIndex += 1;
-    }
-    return `${value.toFixed(unitIndex === 0 ? 0 : 2)} ${units[unitIndex]}`;
+    return formatBytes(item.sizeBytes);
   }
 
   return "-";
 }
 
-export function FileBrowser({ vaultId }: { vaultId: string }) {
+export function FileBrowser() {
   const { vault, addLog } = useVault();
+  const vaultId = useSettingsStore((state) => state.vaultId);
   const [currentPath, setCurrentPath] = useState<Array<{ id: string | null; name: string }>>([
     { id: null, name: "Root" },
   ]);
   const [files, setFiles] = useState<FileItem[]>([]);
   const [serverResults, setServerResults] = useState<FileItem[]>([]);
   const [starredFiles, setStarredFiles] = useState<FileItem[]>([]);
-  const [mediaData, setMediaData] = useState<unknown>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -163,6 +169,7 @@ export function FileBrowser({ vaultId }: { vaultId: string }) {
   const [newFolderName, setNewFolderName] = useState("");
   const [manualParentId, setManualParentId] = useState("");
   const [renameMethod, setRenameMethod] = useState<RenameMethod>("renameItem");
+  const [uploadMode, setUploadMode] = useState<UploadMode>("single");
 
   const [loadingMap, setLoadingMap] = useState<Record<string, boolean>>({});
 
@@ -276,24 +283,6 @@ export function FileBrowser({ vaultId }: { vaultId: string }) {
     }
   };
 
-  const fetchMedia = async () => {
-    if (!ensureReady()) {
-      return;
-    }
-
-    setLoading("getMedia", true);
-    try {
-      addLog("info", "getMedia", "Fetching media data...");
-      const response = await vault.getMedia(activeVaultId);
-      setMediaData(extractPayload(response));
-      addLog("success", "getMedia", "Media data fetched", response);
-    } catch (error) {
-      addLog("error", "getMedia", "Failed to fetch media", error);
-    } finally {
-      setLoading("getMedia", false);
-    }
-  };
-
   const handleCreateFolder = async () => {
     if (!ensureReady()) {
       return;
@@ -322,13 +311,11 @@ export function FileBrowser({ vaultId }: { vaultId: string }) {
     }
   };
 
-  // Hand files to the upload manager, which runs each through the vault SDK
-  // presigned-URL pipeline with a concurrent queue and live progress.
   const handleSelectedFiles = (files: File[]) => {
     if (!ensureReady()) {
       return;
     }
-    upload.enqueue(files, resolveOperationParentId());
+    upload.enqueue(files, resolveOperationParentId(), uploadMode);
   };
 
   const handleTabDrop = (event: React.DragEvent<HTMLDivElement>) => {
@@ -550,10 +537,10 @@ export function FileBrowser({ vaultId }: { vaultId: string }) {
       <CardHeader className="space-y-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <CardTitle>File and Media Test Lab</CardTitle>
+            <CardTitle>File Test Lab</CardTitle>
             <CardDescription>
-              Covers `getAllFiles`, `getFiles`, `uploadFile`, `uploadFiles`, folder/file
-              operations, starring, and `getMedia`.
+              Covers `getAllFiles`, `getFiles`, `uploadFile`, folder/file operations,
+              and starring.
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -601,7 +588,6 @@ export function FileBrowser({ vaultId }: { vaultId: string }) {
             <TabsTrigger value="explorer">Explorer</TabsTrigger>
             <TabsTrigger value="search">SDK Search</TabsTrigger>
             <TabsTrigger value="starred">Starred</TabsTrigger>
-            <TabsTrigger value="media">Media</TabsTrigger>
             <TabsTrigger value="uploads">Upload Lab</TabsTrigger>
           </TabsList>
 
@@ -680,30 +666,37 @@ export function FileBrowser({ vaultId }: { vaultId: string }) {
             )}
           </TabsContent>
 
-          <TabsContent value="media" className="space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">
-                Fetches media payload for the active vault using `getMedia`.
-              </p>
-              <Button onClick={fetchMedia} disabled={loadingMap.getMedia}>
-                Run getMedia
-              </Button>
-            </div>
-            <div className="rounded-md border bg-slate-950 p-3">
-              <pre className="max-h-80 overflow-auto text-xs text-slate-100">
-                {mediaData
-                  ? JSON.stringify(mediaData, null, 2)
-                  : "No media response yet. Click Run getMedia."}
-              </pre>
-            </div>
-          </TabsContent>
-
           <TabsContent value="uploads" className="space-y-4">
-            <Input
-              placeholder="Optional parent folder ID override (default: current folder)"
-              value={manualParentId}
-              onChange={(e) => setManualParentId(e.target.value)}
-            />
+            <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_280px]">
+              <Input
+                placeholder="Optional parent folder ID override (default: current folder)"
+                value={manualParentId}
+                onChange={(e) => setManualParentId(e.target.value)}
+              />
+              <div className="flex items-center gap-2">
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  Upload API
+                </span>
+                <Select
+                  value={uploadMode}
+                  onValueChange={(value) => setUploadMode(value as UploadMode)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="single">uploadFile (per file)</SelectItem>
+                    <SelectItem value="batch">uploadFiles (batch)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <p className="rounded-md border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+              {uploadMode === "single"
+                ? "uploadFile() runs one call per file on a 3-at-a-time queue and throws on failure, so each file reports its own error."
+                : "uploadFiles() sends the whole selection in one call. It never throws for per-file failures — it resolves with a status array, so partial success is normal."}
+            </p>
 
             <div
               role="button"
@@ -723,8 +716,9 @@ export function FileBrowser({ vaultId }: { vaultId: string }) {
                 Drag and drop files here, or click to browse
               </p>
               <p className="mt-1 text-xs text-slate-500">
-                Destination: {manualParentId.trim() || currentFolderName} · uploaded
-                via SDK presigned-URL flow with live progress
+                Destination: {manualParentId.trim() || currentFolderName} · via{" "}
+                {uploadMode === "single" ? "uploadFile()" : "uploadFiles()"}, which
+                handles hashing, presigning, transfer and registration internally
               </p>
             </div>
 
@@ -751,7 +745,7 @@ export function FileBrowser({ vaultId }: { vaultId: string }) {
                     <TableRow>
                       <TableHead>File</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Progress</TableHead>
+                      <TableHead className="text-right">Size</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -774,8 +768,8 @@ export function FileBrowser({ vaultId }: { vaultId: string }) {
                             <span className="ml-2 text-xs text-red-500">{item.error}</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-right">
-                          {item.status === "success" ? "100%" : `${item.progress}%`}
+                        <TableCell className="text-right text-xs text-muted-foreground">
+                          {formatBytes(item.file.size)}
                         </TableCell>
                       </TableRow>
                     ))}

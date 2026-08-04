@@ -12,89 +12,115 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Wifi, WifiOff } from "lucide-react";
+import { Eye, EyeOff, Trash2, Wifi, WifiOff } from "lucide-react";
+import { useSettingsStore, type VaultConfig } from "@/store/settingsStore";
 
-const STORAGE_KEY = "vault-sdk-config";
+type SecretField =
+  | "VAULT_ACCESS_KEY"
+  | "VAULT_SECRET_KEY"
+  | "VAULT_CLIENT_API_KEY";
 
-type VaultFormData = {
-  VAULT_ACCESS_KEY: string;
-  VAULT_SECRET_KEY: string;
-  VAULT_CLIENT_API_KEY: string;
-  VAULT_BASE_URL: string;
-  VAULT_WS_URL: string;
-};
-
-const defaultConfig: VaultFormData = {
-  VAULT_ACCESS_KEY: "",
-  VAULT_SECRET_KEY: "",
-  VAULT_CLIENT_API_KEY: "",
-  VAULT_BASE_URL: "http://localhost:7000/api",
-  VAULT_WS_URL: "ws://localhost:8000",
-};
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+interface SecretInputProps {
+  id: SecretField;
+  label: string;
+  value: string;
+  revealed: boolean;
+  onToggle: () => void;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
-function getInitialConfig(): VaultFormData {
-  if (typeof window === "undefined") {
-    return defaultConfig;
-  }
-
-  const saved = window.localStorage.getItem(STORAGE_KEY);
-  if (!saved) {
-    return defaultConfig;
-  }
-
-  try {
-    const parsed: unknown = JSON.parse(saved);
-    if (!isRecord(parsed)) {
-      return defaultConfig;
-    }
-
-    return {
-      ...defaultConfig,
-      VAULT_ACCESS_KEY:
-        typeof parsed.VAULT_ACCESS_KEY === "string" ? parsed.VAULT_ACCESS_KEY : defaultConfig.VAULT_ACCESS_KEY,
-      VAULT_SECRET_KEY:
-        typeof parsed.VAULT_SECRET_KEY === "string" ? parsed.VAULT_SECRET_KEY : defaultConfig.VAULT_SECRET_KEY,
-      VAULT_CLIENT_API_KEY:
-        typeof parsed.VAULT_CLIENT_API_KEY === "string"
-          ? parsed.VAULT_CLIENT_API_KEY
-          : defaultConfig.VAULT_CLIENT_API_KEY,
-      VAULT_BASE_URL:
-        typeof parsed.VAULT_BASE_URL === "string" ? parsed.VAULT_BASE_URL : defaultConfig.VAULT_BASE_URL,
-      VAULT_WS_URL:
-        typeof parsed.VAULT_WS_URL === "string" ? parsed.VAULT_WS_URL : defaultConfig.VAULT_WS_URL,
-    };
-  } catch (error) {
-    console.error("Failed to parse saved vault config", error);
-    return defaultConfig;
-  }
+function SecretInput({
+  id,
+  label,
+  value,
+  revealed,
+  onToggle,
+  onChange,
+}: SecretInputProps) {
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id}>{label}</Label>
+      <div className="relative">
+        <Input
+          id={id}
+          name={id}
+          type={revealed ? "text" : "password"}
+          className={`pr-10 ${revealed ? "font-mono text-xs" : ""}`}
+          value={value}
+          onChange={onChange}
+          autoComplete="off"
+          spellCheck={false}
+          required
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={onToggle}
+          aria-label={`${revealed ? "Hide" : "Show"} ${label}`}
+          aria-pressed={revealed}
+          title={revealed ? `Hide ${label}` : `Show ${label}`}
+          className="absolute top-1/2 right-1 h-7 w-7 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+        >
+          {revealed ? (
+            <EyeOff className="h-4 w-4" />
+          ) : (
+            <Eye className="h-4 w-4" />
+          )}
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 export function ConfigPanel() {
   const { initVault, connectWebsocket, isConnected, wsConnected, disconnect } =
     useVault();
-  const [formData, setFormData] = useState<VaultFormData>(getInitialConfig);
+
+  const config = useSettingsStore((state) => state.config);
+  const setConfigField = useSettingsStore((state) => state.setConfigField);
+  const clearCredentials = useSettingsStore((state) => state.clearCredentials);
+
+  const [revealed, setRevealed] = useState<Record<SecretField, boolean>>({
+    VAULT_ACCESS_KEY: false,
+    VAULT_SECRET_KEY: false,
+    VAULT_CLIENT_API_KEY: false,
+  });
+
+  const allRevealed = Object.values(revealed).every(Boolean);
+
+  const toggleField = (field: SecretField) =>
+    setRevealed((prev) => ({ ...prev, [field]: !prev[field] }));
+
+  const toggleAll = () =>
+    setRevealed({
+      VAULT_ACCESS_KEY: !allRevealed,
+      VAULT_SECRET_KEY: !allRevealed,
+      VAULT_CLIENT_API_KEY: !allRevealed,
+    });
 
   const sanitizedConfig = useMemo(
-    () => ({
-      ...formData,
-      VAULT_WS_URL: formData.VAULT_WS_URL.trim(),
-    }),
-    [formData]
+    () => ({ ...config, VAULT_WS_URL: config.VAULT_WS_URL.trim() }),
+    [config]
   );
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setConfigField(name as keyof VaultConfig, value);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitizedConfig));
     await initVault(sanitizedConfig);
+  };
+
+  const handleClearCredentials = () => {
+    clearCredentials();
+    setRevealed({
+      VAULT_ACCESS_KEY: false,
+      VAULT_SECRET_KEY: false,
+      VAULT_CLIENT_API_KEY: false,
+    });
   };
 
   return (
@@ -161,7 +187,7 @@ export function ConfigPanel() {
                   id="VAULT_BASE_URL"
                   name="VAULT_BASE_URL"
                   placeholder="https://api.your-service.com"
-                  value={formData.VAULT_BASE_URL}
+                  value={config.VAULT_BASE_URL}
                   onChange={handleChange}
                   required
                 />
@@ -172,45 +198,67 @@ export function ConfigPanel() {
                   id="VAULT_WS_URL"
                   name="VAULT_WS_URL"
                   placeholder="wss://api.your-service.com/ws"
-                  value={formData.VAULT_WS_URL}
+                  value={config.VAULT_WS_URL}
                   onChange={handleChange}
                 />
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="VAULT_ACCESS_KEY">Access Key</Label>
-              <Input
-                id="VAULT_ACCESS_KEY"
-                name="VAULT_ACCESS_KEY"
-                type="password"
-                value={formData.VAULT_ACCESS_KEY}
-                onChange={handleChange}
-                required
-              />
+            <div className="flex items-center justify-between border-t pt-4">
+              <span className="text-sm font-medium">Credentials</span>
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={toggleAll}
+                  className="h-7 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  {allRevealed ? (
+                    <EyeOff className="h-3.5 w-3.5" />
+                  ) : (
+                    <Eye className="h-3.5 w-3.5" />
+                  )}
+                  {allRevealed ? "Hide all" : "Show all"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleClearCredentials}
+                  title="Remove the saved keys from this browser"
+                  className="h-7 gap-1.5 px-2 text-xs text-muted-foreground hover:text-red-600"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Clear
+                </Button>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="VAULT_SECRET_KEY">Secret Key</Label>
-              <Input
-                id="VAULT_SECRET_KEY"
-                name="VAULT_SECRET_KEY"
-                type="password"
-                value={formData.VAULT_SECRET_KEY}
-                onChange={handleChange}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="VAULT_CLIENT_API_KEY">Client API Key</Label>
-              <Input
-                id="VAULT_CLIENT_API_KEY"
-                name="VAULT_CLIENT_API_KEY"
-                type="password"
-                value={formData.VAULT_CLIENT_API_KEY}
-                onChange={handleChange}
-                required
-              />
-            </div>
+
+            <SecretInput
+              id="VAULT_ACCESS_KEY"
+              label="Access Key"
+              value={config.VAULT_ACCESS_KEY}
+              revealed={revealed.VAULT_ACCESS_KEY}
+              onToggle={() => toggleField("VAULT_ACCESS_KEY")}
+              onChange={handleChange}
+            />
+            <SecretInput
+              id="VAULT_SECRET_KEY"
+              label="Secret Key"
+              value={config.VAULT_SECRET_KEY}
+              revealed={revealed.VAULT_SECRET_KEY}
+              onToggle={() => toggleField("VAULT_SECRET_KEY")}
+              onChange={handleChange}
+            />
+            <SecretInput
+              id="VAULT_CLIENT_API_KEY"
+              label="Client API Key"
+              value={config.VAULT_CLIENT_API_KEY}
+              revealed={revealed.VAULT_CLIENT_API_KEY}
+              onToggle={() => toggleField("VAULT_CLIENT_API_KEY")}
+              onChange={handleChange}
+            />
           </CardContent>
           <CardFooter>
             <Button type="submit" className="w-full">

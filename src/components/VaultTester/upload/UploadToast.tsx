@@ -7,7 +7,7 @@ import {
   FileIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { STAGE_LABELS, type UploadItem } from "./types";
+import { STATUS_LABELS, type UploadItem } from "./types";
 
 interface UploadToastProps {
   open: boolean;
@@ -109,16 +109,14 @@ export function UploadToast({
                 {active ? (
                   <div className="mt-1.5">
                     <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                      <div
-                        className="h-full rounded-full bg-cyan-500 transition-all"
-                        style={{ width: `${item.progress}%` }}
-                      />
+                      {item.status === "uploading" ? (
+                        <div className="h-full w-1/3 animate-[upload-slide_1.2s_ease-in-out_infinite] rounded-full bg-cyan-500" />
+                      ) : (
+                        <div className="h-full w-0 rounded-full bg-cyan-500" />
+                      )}
                     </div>
                     <p className="mt-1 text-[11px] text-slate-400">
-                      {STAGE_LABELS[item.stage]}
-                      {item.status === "uploading" && item.stage === "uploading"
-                        ? ` · ${item.progress}%`
-                        : ""}
+                      {STATUS_LABELS[item.status]}
                     </p>
                   </div>
                 ) : (
@@ -140,7 +138,11 @@ export function UploadToast({
                   size="icon"
                   className="h-6 w-6 text-slate-400 hover:text-red-500"
                   onClick={() => onCancel(item.id)}
-                  title="Cancel"
+                  title={
+                    item.status === "uploading"
+                      ? "Stop tracking (the transfer cannot be aborted once started)"
+                      : "Cancel"
+                  }
                 >
                   <X className="h-3.5 w-3.5" />
                 </Button>

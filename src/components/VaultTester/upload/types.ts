@@ -5,32 +5,22 @@ export type UploadStatus =
   | "error"
   | "cancelled";
 
-// Mirrors the vault SDK upload pipeline: hash -> presign -> PUT to storage -> register.
-export type UploadStage =
-  | "queued"
-  | "hashing"
-  | "presigning"
-  | "uploading"
-  | "registering"
-  | "done";
+export type UploadMode = "single" | "batch";
 
 export interface UploadItem {
   id: string;
   file: File;
   parentId: string | null;
-  /** Byte-level progress of the storage PUT (0-100). */
   progress: number;
   status: UploadStatus;
-  stage: UploadStage;
   error?: string;
   result?: unknown;
 }
 
-export const STAGE_LABELS: Record<UploadStage, string> = {
-  queued: "Queued",
-  hashing: "Hashing",
-  presigning: "Requesting URL",
+export const STATUS_LABELS: Record<UploadStatus, string> = {
+  pending: "Queued",
   uploading: "Uploading",
-  registering: "Registering",
-  done: "Done",
+  success: "Uploaded",
+  error: "Failed",
+  cancelled: "Cancelled",
 };
