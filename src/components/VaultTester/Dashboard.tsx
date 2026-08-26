@@ -59,7 +59,22 @@ const methodGroups = [
   },
   {
     title: "Platform",
-    methods: ["createVault", "importVault", "createBot"],
+    methods: [
+      "createVault",
+      "importVault",
+      "createBot",
+      "getBotDetails",
+      "addDriveFilesToBot",
+      "addDriveFoldersToBot",
+      "uploadFilesToBot",
+      "createVaultLaunchToken",
+      "redeemVaultLaunchToken",
+      "connectToBotChat",
+      "joinBotChat",
+      "sendBotChatMessage",
+      "sendBotChatTyping",
+      "disconnectBotChat",
+    ],
   },
   {
     title: "Connection",
@@ -106,7 +121,7 @@ export function Dashboard() {
               </p>
               <div className="rounded-lg border bg-cyan-50/70 p-3 text-sm text-cyan-950">
                 For local testing, `http://localhost:8000` targets `twin-backend-sdk` as a proxy.
-                `http://localhost:7000` targets `twin-vault-backend` directly and is the path used
+                `http://localhost:7000/api` targets `twin-vault-backend` directly and is the path used
                 by `vault-sdk-dev` bot onboarding now that the route aliases are aligned.
               </div>
               <div className="grid gap-3 md:grid-cols-2">
