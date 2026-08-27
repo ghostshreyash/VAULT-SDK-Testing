@@ -19,6 +19,7 @@ export function UserManagement() {
   const { vault, addLog } = useVault();
   const vaultId = useSettingsStore((state) => state.vaultId);
   const setVaultId = useSettingsStore((state) => state.setVaultId);
+  const botChatWsUrl = useSettingsStore((state) => state.config.BOT_CHAT_WS_URL);
   const [loading, setLoading] = useState(false);
 
   const [createUserEmail, setCreateUserEmail] = useState("");
@@ -619,6 +620,7 @@ export function UserManagement() {
         sessionId: chatSessionId.trim() || undefined,
         token: accessToken.trim() || undefined,
         launchToken: launchToken.trim() || undefined,
+        wsUrl: botChatWsUrl.trim() || undefined,
       });
 
       setConnectBotChatResult(response);
@@ -1184,6 +1186,10 @@ export function UserManagement() {
                 If you leave token fields empty, `connectToBotChat` will mint and redeem them automatically.
               </CardDescription>
             </CardHeader>
+            <div className="px-6 pb-2 text-xs text-muted-foreground">
+              Bot chat uses the newer token-based `/ws/chat` flow. It does not depend on
+              the legacy signed `connectToWebsocket()` connection.
+            </div>
             <div className="px-6 pb-2 text-xs text-muted-foreground">
               Status: {chatConnected ? "Connected" : "Disconnected"}
               {chatStreaming ? " • Streaming response" : ""}

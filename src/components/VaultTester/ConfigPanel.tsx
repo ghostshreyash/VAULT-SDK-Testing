@@ -78,6 +78,7 @@ export function ConfigPanel() {
     useVault();
 
   const config = useSettingsStore((state) => state.config);
+  const setConfig = useSettingsStore((state) => state.setConfig);
   const setConfigField = useSettingsStore((state) => state.setConfigField);
   const clearCredentials = useSettingsStore((state) => state.clearCredentials);
 
@@ -120,6 +121,25 @@ export function ConfigPanel() {
       VAULT_ACCESS_KEY: false,
       VAULT_SECRET_KEY: false,
       VAULT_CLIENT_API_KEY: false,
+    });
+  };
+
+  const applyPreset = (mode: "proxy" | "vault") => {
+    if (mode === "proxy") {
+      setConfig({
+        ...config,
+        VAULT_BASE_URL: "http://localhost:8000",
+        VAULT_WS_URL: "ws://localhost:8000/ws/chat",
+        BOT_CHAT_WS_URL: "ws://localhost:8000/ws/chat",
+      });
+      return;
+    }
+
+    setConfig({
+      ...config,
+      VAULT_BASE_URL: "http://localhost:7000/api",
+      VAULT_WS_URL: "ws://localhost:7000/ws/chat",
+      BOT_CHAT_WS_URL: "ws://localhost:7000/ws/chat",
     });
   };
 
@@ -180,6 +200,22 @@ export function ConfigPanel() {
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
+            <div className="rounded-lg border bg-muted/20 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium">Local presets</span>
+                <Button type="button" variant="outline" size="sm" onClick={() => applyPreset("proxy")}>
+                  Proxy SDK :8000
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => applyPreset("vault")}>
+                  Direct Vault :7000
+                </Button>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Use `:8000` when routing through `twin-backend-sdk`. Use `:7000` when calling
+                `twin-vault-backend` directly with `vault-sdk-dev` via the `/api` base path.
+              </p>
+            </div>
+
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="VAULT_BASE_URL">Vault Base URL</Label>
@@ -201,6 +237,20 @@ export function ConfigPanel() {
                   value={config.VAULT_WS_URL}
                   onChange={handleChange}
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="BOT_CHAT_WS_URL">Bot Chat WS URL (Optional)</Label>
+                <Input
+                  id="BOT_CHAT_WS_URL"
+                  name="BOT_CHAT_WS_URL"
+                  placeholder="wss://sdk.twns.ai/ws/chat"
+                  value={config.BOT_CHAT_WS_URL}
+                  onChange={handleChange}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Used only by `connectToBotChat`. Leave empty to derive `/ws/chat`
+                  from `VAULT_BASE_URL`.
+                </p>
               </div>
             </div>
 

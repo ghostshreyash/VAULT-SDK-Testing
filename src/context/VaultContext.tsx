@@ -8,6 +8,7 @@ interface VaultConfig {
   VAULT_CLIENT_API_KEY: string;
   VAULT_BASE_URL: string;
   VAULT_WS_URL?: string;
+  BOT_CHAT_WS_URL?: string;
 }
 
 interface VaultContextType {
@@ -243,4 +244,3 @@ export const useVault = () => {
   }
   return context;
 };
-
