@@ -176,11 +176,16 @@ export const VaultProvider = ({ children }: { children: ReactNode }) => {
       addLog("success", "initVault", "Vault SDK initialized");
 
       if (newConfig.VAULT_WS_URL?.trim()) {
-        try {
-          await connectWebsocketForInstance(vaultInstance);
-        } catch {
-          // Keep SDK connected even if WebSocket fails.
-        }
+        // try {
+        //   await connectWebsocketForInstance(vaultInstance);
+        // } catch {
+        //   // Keep SDK connected even if WebSocket fails.
+        // }
+        addLog(
+          "info",
+          "connectToWebsocket",
+          "Legacy WebSocket URL is configured. Use the manual reconnect button if you want to test that older flow."
+        );
       } else {
         addLog(
           "warning",
