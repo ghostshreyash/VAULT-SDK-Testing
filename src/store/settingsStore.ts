@@ -7,6 +7,7 @@ export interface VaultConfig {
   VAULT_CLIENT_API_KEY: string;
   VAULT_BASE_URL: string;
   VAULT_WS_URL: string;
+  BOT_CHAT_WS_URL: string;
 }
 
 export const emptyConfig: VaultConfig = {
@@ -14,7 +15,8 @@ export const emptyConfig: VaultConfig = {
   VAULT_SECRET_KEY: "",
   VAULT_CLIENT_API_KEY: "",
   VAULT_BASE_URL: "http://localhost:7000/api",
-  VAULT_WS_URL: "ws://localhost:8000",
+  VAULT_WS_URL: "",
+  BOT_CHAT_WS_URL: "",
 };
 
 interface SettingsState {
@@ -114,4 +116,5 @@ export const useSettingsStore = create<SettingsState>()(
 export const selectSanitizedConfig = (state: SettingsState): VaultConfig => ({
   ...state.config,
   VAULT_WS_URL: state.config.VAULT_WS_URL.trim(),
+  BOT_CHAT_WS_URL: state.config.BOT_CHAT_WS_URL.trim(),
 });
