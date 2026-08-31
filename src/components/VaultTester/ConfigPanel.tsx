@@ -130,7 +130,7 @@ export function ConfigPanel() {
         ...config,
         VAULT_BASE_URL: "http://localhost:8000",
         VAULT_WS_URL: "ws://localhost:8000/ws/chat",
-        BOT_CHAT_WS_URL: "ws://localhost:8000/ws/chat",
+        BOT_CHAT_WS_URL: "ws://localhost:8000/ws/bot-chat",
       });
       return;
     }
@@ -139,7 +139,7 @@ export function ConfigPanel() {
       ...config,
       VAULT_BASE_URL: "http://localhost:7000/api",
       VAULT_WS_URL: "ws://localhost:7000/ws/chat",
-      BOT_CHAT_WS_URL: "ws://localhost:7000/ws/chat",
+      BOT_CHAT_WS_URL: "ws://localhost:7000/ws/bot-chat",
     });
   };
 
@@ -243,12 +243,12 @@ export function ConfigPanel() {
                 <Input
                   id="BOT_CHAT_WS_URL"
                   name="BOT_CHAT_WS_URL"
-                  placeholder="wss://sdk.twns.ai/ws/chat"
+                  placeholder="wss://sdk.twns.ai/ws/bot-chat"
                   value={config.BOT_CHAT_WS_URL}
                   onChange={handleChange}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Used only by `connectToBotChat`. Leave empty to derive `/ws/chat`
+                  Used only by `connectToBotChat`. Leave empty to derive `/ws/bot-chat`
                   from `VAULT_BASE_URL`.
                 </p>
               </div>

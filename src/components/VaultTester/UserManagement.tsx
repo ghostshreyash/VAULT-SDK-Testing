@@ -79,6 +79,81 @@ export function UserManagement() {
     return "";
   };
 
+  const extractLaunchToken = (value: unknown): string => {
+    if (!value || typeof value !== "object") return "";
+
+    const directToken =
+      "launchToken" in value && typeof value.launchToken === "string"
+        ? value.launchToken
+        : "";
+    if (directToken.trim()) return directToken.trim();
+
+    const data =
+      "data" in value && value.data && typeof value.data === "object"
+        ? value.data
+        : null;
+    if (
+      data &&
+      "launchToken" in data &&
+      typeof data.launchToken === "string" &&
+      data.launchToken.trim()
+    ) {
+      return data.launchToken.trim();
+    }
+
+    return "";
+  };
+
+  const extractAccessToken = (value: unknown): string => {
+    if (!value || typeof value !== "object") return "";
+
+    const directToken =
+      "accessToken" in value && typeof value.accessToken === "string"
+        ? value.accessToken
+        : "";
+    if (directToken.trim()) return directToken.trim();
+
+    const user =
+      "user" in value && value.user && typeof value.user === "object"
+        ? value.user
+        : null;
+    if (
+      user &&
+      "accessToken" in user &&
+      typeof user.accessToken === "string" &&
+      user.accessToken.trim()
+    ) {
+      return user.accessToken.trim();
+    }
+
+    const data =
+      "data" in value && value.data && typeof value.data === "object"
+        ? value.data
+        : null;
+    if (!data) return "";
+
+    if (
+      "accessToken" in data &&
+      typeof data.accessToken === "string" &&
+      data.accessToken.trim()
+    ) {
+      return data.accessToken.trim();
+    }
+
+    const dataUser =
+      "user" in data && data.user && typeof data.user === "object" ? data.user : null;
+    if (
+      dataUser &&
+      "accessToken" in dataUser &&
+      typeof dataUser.accessToken === "string" &&
+      dataUser.accessToken.trim()
+    ) {
+      return dataUser.accessToken.trim();
+    }
+
+    return "";
+  };
+
   const parseHistoryInput = () => {
     if (!chatHistoryInput.trim()) return [];
 
@@ -547,8 +622,8 @@ export function UserManagement() {
       const response = await vault.createVaultLaunchToken(activeVaultId);
       setLaunchTokenResult(response);
 
-      const tokenValue = response?.data?.launchToken;
-      if (typeof tokenValue === "string") {
+      const tokenValue = extractLaunchToken(response);
+      if (tokenValue) {
         setLaunchToken(tokenValue);
       }
 
@@ -579,8 +654,8 @@ export function UserManagement() {
       const response = await vault.redeemVaultLaunchToken(activeLaunchToken);
       setRedeemTokenResult(response);
 
-      const tokenValue = response?.data?.user?.accessToken;
-      if (typeof tokenValue === "string") {
+      const tokenValue = extractAccessToken(response);
+      if (tokenValue) {
         setAccessToken(tokenValue);
       }
 
@@ -615,11 +690,52 @@ export function UserManagement() {
     try {
       addLog("info", "connectToBotChat", `Connecting bot chat for bot ${activeBotId}...`);
 
+      let resolvedLaunchToken = launchToken.trim();
+      let resolvedAccessToken = accessToken.trim();
+
+      if (!resolvedAccessToken) {
+        if (!resolvedLaunchToken) {
+          addLog(
+            "info",
+            "connectToBotChat",
+            "No bot chat token provided. Creating a launch token first..."
+          );
+          const launchResponse = await vault.createVaultLaunchToken(activeVaultId);
+          setLaunchTokenResult(launchResponse);
+
+          resolvedLaunchToken = extractLaunchToken(launchResponse);
+          if (!resolvedLaunchToken) {
+            throw new Error("Launch token was not returned by createVaultLaunchToken");
+          }
+
+          setLaunchToken(resolvedLaunchToken);
+        }
+
+        addLog(
+          "info",
+          "connectToBotChat",
+          "Redeeming launch token for a bot chat access token..."
+        );
+        const redeemResponse = await vault.redeemVaultLaunchToken(resolvedLaunchToken);
+        setRedeemTokenResult(redeemResponse);
+
+        resolvedAccessToken = extractAccessToken(redeemResponse);
+        if (!resolvedAccessToken) {
+          throw new Error("Access token was not returned by redeemVaultLaunchToken");
+        }
+
+        setAccessToken(resolvedAccessToken);
+      }
+
+      if (!resolvedAccessToken) {
+        throw new Error("Bot chat access token is empty");
+      }
+
       const response = await vault.connectToBotChat(activeVaultId, {
         botId: activeBotId,
         sessionId: chatSessionId.trim() || undefined,
-        token: accessToken.trim() || undefined,
-        launchToken: launchToken.trim() || undefined,
+        token: resolvedAccessToken,
+        launchToken: resolvedLaunchToken || undefined,
         wsUrl: botChatWsUrl.trim() || undefined,
       });
 
@@ -1187,7 +1303,7 @@ export function UserManagement() {
               </CardDescription>
             </CardHeader>
             <div className="px-6 pb-2 text-xs text-muted-foreground">
-              Bot chat uses the newer token-based `/ws/chat` flow. It does not depend on
+              Bot chat uses the newer token-based `/ws/bot-chat` flow. It does not depend on
               the legacy signed `connectToWebsocket()` connection.
             </div>
             <div className="px-6 pb-2 text-xs text-muted-foreground">
