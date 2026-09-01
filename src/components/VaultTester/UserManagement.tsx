@@ -34,8 +34,16 @@ export function UserManagement() {
   const [botProfession, setBotProfession] = useState("");
   const [botDescription, setBotDescription] = useState("");
   const [createBotResult, setCreateBotResult] = useState<unknown>(null);
+  const [deleteBotId, setDeleteBotId] = useState("");
+  const [deleteBotResult, setDeleteBotResult] = useState<unknown>(null);
   const [botDetailsBotId, setBotDetailsBotId] = useState("");
   const [botDetailsResult, setBotDetailsResult] = useState<unknown>(null);
+  const [botTextBotId, setBotTextBotId] = useState("");
+  const [botTextFileId, setBotTextFileId] = useState("");
+  const [botTextResult, setBotTextResult] = useState("");
+  const [botFileActionBotId, setBotFileActionBotId] = useState("");
+  const [botFileActionFileId, setBotFileActionFileId] = useState("");
+  const [botFileActionResult, setBotFileActionResult] = useState<unknown>(null);
   const [uploadBotId, setUploadBotId] = useState("");
   const [driveFileBotId, setDriveFileBotId] = useState("");
   const [driveFileIds, setDriveFileIds] = useState("");
@@ -603,6 +611,175 @@ export function UserManagement() {
     }
   };
 
+  const handleDeleteBot = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!vault) {
+      addLog("warning", "deleteBot", "Initialize SDK before deleting bots");
+      return;
+    }
+
+    const activeVaultId = vaultId.trim();
+    if (!activeVaultId) {
+      addLog(
+        "warning",
+        "deleteBot",
+        "Provide Target Vault ID in the dashboard header before deleting a bot"
+      );
+      return;
+    }
+
+    const activeBotId = deleteBotId.trim();
+    if (!activeBotId) {
+      addLog("warning", "deleteBot", "Enter a Bot ID before deleting");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      console.log("deleteBot payload", {
+        activeBotId,
+        activeVaultId,
+        rawVaultId: vaultId,
+      });
+      addLog("info", "deleteBot", "Delete bot payload", {
+        activeBotId,
+        activeVaultId,
+        rawVaultId: vaultId,
+      });
+      addLog("info", "deleteBot", `Deleting bot ${activeBotId}...`);
+      const response = await vault.deleteBot(activeBotId, activeVaultId);
+      setDeleteBotResult(response);
+
+      if (botDetailsBotId.trim() === activeBotId) setBotDetailsBotId("");
+      if (uploadBotId.trim() === activeBotId) setUploadBotId("");
+      if (driveFileBotId.trim() === activeBotId) setDriveFileBotId("");
+      if (driveFolderBotId.trim() === activeBotId) setDriveFolderBotId("");
+      if (chatBotId.trim() === activeBotId) setChatBotId("");
+      setDeleteBotId("");
+
+      addLog("success", "deleteBot", "Bot deleted successfully", response);
+    } catch (error) {
+      addLog("error", "deleteBot", "Failed to delete bot", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGetBotFileText = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!vault) {
+      addLog("warning", "getBotFileText", "Initialize SDK before reading bot file text");
+      return;
+    }
+
+    const activeVaultId = vaultId.trim();
+    if (!activeVaultId) {
+      addLog(
+        "warning",
+        "getBotFileText",
+        "Provide Target Vault ID in the dashboard header before reading bot file text"
+      );
+      return;
+    }
+
+    const activeBotId = botTextBotId.trim();
+    if (!activeBotId) {
+      addLog("warning", "getBotFileText", "Enter a Bot ID before reading bot file text");
+      return;
+    }
+
+    const activeFileId = botTextFileId.trim();
+    if (!activeFileId) {
+      addLog("warning", "getBotFileText", "Enter a File ID before reading bot file text");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      addLog("info", "getBotFileText", `Fetching extracted text for file ${activeFileId}...`);
+      const response = await vault.getBotFileText(activeVaultId, activeBotId, activeFileId);
+      setBotTextResult(typeof response === "string" ? response : JSON.stringify(response, null, 2));
+      addLog("success", "getBotFileText", "Bot file text fetched");
+    } catch (error) {
+      setBotTextResult("");
+      addLog("error", "getBotFileText", "Failed to fetch bot file text", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBotFileAction = async (action: "cancel" | "retry") => {
+    if (!vault) {
+      addLog(
+        "warning",
+        action === "cancel" ? "cancelBotFile" : "retryBotFile",
+        "Initialize SDK before updating bot file status"
+      );
+      return;
+    }
+
+    const activeVaultId = vaultId.trim();
+    if (!activeVaultId) {
+      addLog(
+        "warning",
+        action === "cancel" ? "cancelBotFile" : "retryBotFile",
+        "Provide Target Vault ID in the dashboard header before updating bot file status"
+      );
+      return;
+    }
+
+    const activeBotId = botFileActionBotId.trim();
+    if (!activeBotId) {
+      addLog(
+        "warning",
+        action === "cancel" ? "cancelBotFile" : "retryBotFile",
+        "Enter a Bot ID before updating bot file status"
+      );
+      return;
+    }
+
+    const activeFileId = botFileActionFileId.trim();
+    if (!activeFileId) {
+      addLog(
+        "warning",
+        action === "cancel" ? "cancelBotFile" : "retryBotFile",
+        "Enter a File ID before updating bot file status"
+      );
+      return;
+    }
+
+    setLoading(true);
+    try {
+      addLog(
+        "info",
+        action === "cancel" ? "cancelBotFile" : "retryBotFile",
+        `${action === "cancel" ? "Cancelling" : "Retrying"} bot file ${activeFileId}...`
+      );
+      const response =
+        action === "cancel"
+          ? await vault.cancelBotFile(activeVaultId, activeBotId, activeFileId)
+          : await vault.retryBotFile(activeVaultId, activeBotId, activeFileId);
+      setBotFileActionResult(response);
+      addLog(
+        "success",
+        action === "cancel" ? "cancelBotFile" : "retryBotFile",
+        action === "cancel" ? "Bot file cancelled" : "Bot file retry started",
+        response
+      );
+    } catch (error) {
+      addLog(
+        "error",
+        action === "cancel" ? "cancelBotFile" : "retryBotFile",
+        action === "cancel"
+          ? "Failed to cancel bot file"
+          : "Failed to retry bot file",
+        error
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCreateLaunchToken = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!vault) {
@@ -844,17 +1021,26 @@ export function UserManagement() {
         the next step.
       </div>
 
-      <Tabs defaultValue="create-user">
-        <TabsList>
-          <TabsTrigger value="create-user">Create Vault</TabsTrigger>
-          <TabsTrigger value="import-vault">Import Vault</TabsTrigger>
-          <TabsTrigger value="create-bot">Create Bot</TabsTrigger>
-          <TabsTrigger value="get-bot-details">Get Bot Details</TabsTrigger>
-          <TabsTrigger value="add-drive-file">Add Storage File</TabsTrigger>
-          <TabsTrigger value="add-drive-folder">Add Storage Folder</TabsTrigger>
-          <TabsTrigger value="upload-bot-files">Upload Bot Files</TabsTrigger>
-          <TabsTrigger value="bot-chat">Bot Chat</TabsTrigger>
+      <Tabs defaultValue="platform" >
+        <TabsList className="h-auto w-full flex-wrap justify-start ">
+          <TabsTrigger value="platform" className="flex-none">
+            Platform
+          </TabsTrigger>
+          <TabsTrigger value="bot" className="flex-none">
+            Bot
+          </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="platform" className="space-y-4">
+          <Tabs defaultValue="create-user" className="space-y-4">
+            <TabsList className="h-auto min-h-[5.5rem] w-full flex-wrap justify-start gap-1 sm:min-h-0">
+              <TabsTrigger value="create-user" className="flex-none">
+                Create Vault
+              </TabsTrigger>
+              <TabsTrigger value="import-vault" className="flex-none">
+                Import Vault
+              </TabsTrigger>
+            </TabsList>
 
         <TabsContent value="create-user" className="space-y-4">
           <Card>
@@ -959,6 +1145,41 @@ export function UserManagement() {
             </CardContent>
           </Card>
         </TabsContent>
+
+          </Tabs>
+        </TabsContent>
+
+        <TabsContent value="bot" className="space-y-4">
+          <Tabs defaultValue="create-bot" >
+            <TabsList className="!flex !h-auto !w-full flex-wrap content-start !items-start justify-start gap-1 py-1">
+              <TabsTrigger value="create-bot" className="flex-none">
+                Create Bot
+              </TabsTrigger>
+              <TabsTrigger value="delete-bot" className="flex-none">
+                Delete Bot
+              </TabsTrigger>
+              <TabsTrigger value="get-bot-details" className="flex-none">
+                Get Bot Details
+              </TabsTrigger>
+              <TabsTrigger value="get-bot-file-text" className="flex-none">
+                Get Bot File Text
+              </TabsTrigger>
+              <TabsTrigger value="bot-file-actions" className="flex-none">
+                Bot File Actions
+              </TabsTrigger>
+              <TabsTrigger value="add-drive-file" className="flex-none">
+                Add Storage File
+              </TabsTrigger>
+              <TabsTrigger value="add-drive-folder" className="flex-none">
+                Add Storage Folder
+              </TabsTrigger>
+              <TabsTrigger value="upload-bot-files" className="flex-none">
+                Upload Bot Files
+              </TabsTrigger>
+              <TabsTrigger value="bot-chat" className="flex-none">
+                Bot Chat
+              </TabsTrigger>
+            </TabsList>
 
         <TabsContent value="create-bot" className="space-y-4">
           <Card>
@@ -1081,6 +1302,193 @@ export function UserManagement() {
               <pre className="max-h-56 overflow-auto rounded-md bg-slate-950 p-3 text-xs text-slate-100">
                 {botDetailsResult
                   ? JSON.stringify(botDetailsResult, null, 2)
+                  : "No response yet."}
+              </pre>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="delete-bot" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Delete Bot</CardTitle>
+              <CardDescription>
+                Runs `deleteBot(botId, vaultId)`. The shared Target Vault ID is passed with
+                the request so deletion stays in the expected vault context.
+              </CardDescription>
+            </CardHeader>
+            <form onSubmit={handleDeleteBot}>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="deleteBotVaultId">Target Vault ID</Label>
+                  <Input
+                    id="deleteBotVaultId"
+                    value={vaultId}
+                    readOnly
+                    placeholder="Set Target Vault ID in the dashboard header"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="deleteBotId">Bot ID</Label>
+                  <Input
+                    id="deleteBotId"
+                    placeholder="Paste bot ID or create a bot above"
+                    value={deleteBotId}
+                    onChange={(e) => setDeleteBotId(e.target.value)}
+                    required
+                  />
+                </div>
+              </CardContent>
+              <CardFooter>
+                <Button type="submit" disabled={loading} variant="destructive">
+                  {loading ? "Deleting..." : "Run deleteBot"}
+                </Button>
+              </CardFooter>
+            </form>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Latest Response</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <pre className="max-h-56 overflow-auto rounded-md bg-slate-950 p-3 text-xs text-slate-100">
+                {deleteBotResult
+                  ? JSON.stringify(deleteBotResult, null, 2)
+                  : "No response yet."}
+              </pre>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="get-bot-file-text" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Get Bot File Text</CardTitle>
+              <CardDescription>
+                Runs `getBotFileText(vaultId, botId, fileId)`. Use this to fetch the
+                extracted plain-text content for a bot file through the SDK route.
+              </CardDescription>
+            </CardHeader>
+            <form onSubmit={handleGetBotFileText}>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="botTextVaultId">Target Vault ID</Label>
+                  <Input
+                    id="botTextVaultId"
+                    value={vaultId}
+                    readOnly
+                    placeholder="Set Target Vault ID in the dashboard header"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="botTextBotId">Bot ID</Label>
+                  <Input
+                    id="botTextBotId"
+                    placeholder="Paste bot ID"
+                    value={botTextBotId}
+                    onChange={(e) => setBotTextBotId(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="botTextFileId">File ID</Label>
+                  <Input
+                    id="botTextFileId"
+                    placeholder="Paste bot file ID"
+                    value={botTextFileId}
+                    onChange={(e) => setBotTextFileId(e.target.value)}
+                    required
+                  />
+                </div>
+              </CardContent>
+              <CardFooter>
+                <Button type="submit" disabled={loading}>
+                  {loading ? "Fetching..." : "Run getBotFileText"}
+                </Button>
+              </CardFooter>
+            </form>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Latest Response</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-md bg-slate-950 p-3 text-xs text-slate-100">
+                {botTextResult || "No response yet."}
+              </pre>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="bot-file-actions" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Bot File Actions</CardTitle>
+              <CardDescription>
+                Runs `cancelBotFile(vaultId, botId, fileId)` and
+                `retryBotFile(vaultId, botId, fileId)` through the SDK route.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="botFileActionVaultId">Target Vault ID</Label>
+                <Input
+                  id="botFileActionVaultId"
+                  value={vaultId}
+                  readOnly
+                  placeholder="Set Target Vault ID in the dashboard header"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="botFileActionBotId">Bot ID</Label>
+                <Input
+                  id="botFileActionBotId"
+                  placeholder="Paste bot ID"
+                  value={botFileActionBotId}
+                  onChange={(e) => setBotFileActionBotId(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="botFileActionFileId">File ID</Label>
+                <Input
+                  id="botFileActionFileId"
+                  placeholder="Paste bot file ID"
+                  value={botFileActionFileId}
+                  onChange={(e) => setBotFileActionFileId(e.target.value)}
+                  required
+                />
+              </div>
+            </CardContent>
+            <CardFooter className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={loading}
+                onClick={() => handleBotFileAction("cancel")}
+              >
+                {loading ? "Working..." : "Run cancelBotFile"}
+              </Button>
+              <Button
+                type="button"
+                disabled={loading}
+                onClick={() => handleBotFileAction("retry")}
+              >
+                {loading ? "Working..." : "Run retryBotFile"}
+              </Button>
+            </CardFooter>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Latest Response</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <pre className="max-h-56 overflow-auto rounded-md bg-slate-950 p-3 text-xs text-slate-100">
+                {botFileActionResult
+                  ? JSON.stringify(botFileActionResult, null, 2)
                   : "No response yet."}
               </pre>
             </CardContent>
@@ -1467,6 +1875,8 @@ export function UserManagement() {
               </pre>
             </CardContent>
           </Card>
+            </TabsContent>
+          </Tabs>
         </TabsContent>
       </Tabs>
     </div>
