@@ -29,7 +29,7 @@
     "stream-browserify": "^3.0.0",
     "tailwind-merge": "^3.4.0",
     "tailwindcss": "^4.1.18",
-    "vault-sdk-dev": "3.0.2",
+    "vault-sdk-dev": "^3.0.2",
     "vault-sdk-staging": "^2.0.0",
     "zustand": "^5.0.14"
   },
