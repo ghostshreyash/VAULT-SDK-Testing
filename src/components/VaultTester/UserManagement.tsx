@@ -34,10 +34,34 @@ export function UserManagement() {
   const [botProfession, setBotProfession] = useState("");
   const [botDescription, setBotDescription] = useState("");
   const [createBotResult, setCreateBotResult] = useState<unknown>(null);
+  const [updateBotId, setUpdateBotId] = useState("");
+  const [updateBotName, setUpdateBotName] = useState("");
+  const [updateBotProfession, setUpdateBotProfession] = useState("");
+  const [updateBotDescription, setUpdateBotDescription] = useState("");
+  const [updateBotUseLLMFallback, setUpdateBotUseLLMFallback] = useState("");
+  const [updateBotWordLimit, setUpdateBotWordLimit] = useState("");
+  const [updateBotResult, setUpdateBotResult] = useState<unknown>(null);
   const [deleteBotId, setDeleteBotId] = useState("");
   const [deleteBotResult, setDeleteBotResult] = useState<unknown>(null);
   const [botDetailsBotId, setBotDetailsBotId] = useState("");
   const [botDetailsResult, setBotDetailsResult] = useState<unknown>(null);
+  const [botSessionsBotId, setBotSessionsBotId] = useState("");
+  const [botSessionsSessionId, setBotSessionsSessionId] = useState("");
+  const [botSessionsResult, setBotSessionsResult] = useState<unknown>(null);
+  const [deleteSessionsBotId, setDeleteSessionsBotId] = useState("");
+  const [deleteSessionIds, setDeleteSessionIds] = useState("");
+  const [deleteSessionsResult, setDeleteSessionsResult] = useState<unknown>(null);
+  const [exportSessionsBotId, setExportSessionsBotId] = useState("");
+  const [exportSessionIds, setExportSessionIds] = useState("");
+  const [exportSaveOption, setExportSaveOption] = useState("drive");
+  const [exportTargetBotId, setExportTargetBotId] = useState("");
+  const [exportSessionsResult, setExportSessionsResult] = useState<unknown>(null);
+  const [removeAssetBotId, setRemoveAssetBotId] = useState("");
+  const [removeAssetType, setRemoveAssetType] = useState("file");
+  const [removeAssetId, setRemoveAssetId] = useState("");
+  const [removeAssetPermanent, setRemoveAssetPermanent] = useState(false);
+  const [removeAssetKeepTranscript, setRemoveAssetKeepTranscript] = useState(false);
+  const [removeAssetResult, setRemoveAssetResult] = useState<unknown>(null);
   const [botTextBotId, setBotTextBotId] = useState("");
   const [botTextFileId, setBotTextFileId] = useState("");
   const [botTextResult, setBotTextResult] = useState("");
@@ -397,6 +421,64 @@ export function UserManagement() {
     }
   };
 
+  const handleUpdateBot = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!vault) {
+      addLog("warning", "updateBot", "Initialize SDK before updating bots");
+      return;
+    }
+
+    const activeVaultId = vaultId.trim();
+    if (!activeVaultId) {
+      addLog(
+        "warning",
+        "updateBot",
+        "Provide Target Vault ID in the dashboard header before updating a bot"
+      );
+      return;
+    }
+
+    const activeBotId = updateBotId.trim();
+    if (!activeBotId) {
+      addLog("warning", "updateBot", "Enter a Bot ID before updating a bot");
+      return;
+    }
+
+    const updates: Record<string, unknown> = {};
+    if (updateBotName.trim()) updates.name = updateBotName.trim();
+    if (updateBotProfession.trim()) updates.profession = updateBotProfession.trim();
+    if (updateBotDescription.trim()) updates.description = updateBotDescription.trim();
+    if (updateBotUseLLMFallback) {
+      updates.useLLMFallback = updateBotUseLLMFallback === "true";
+    }
+    if (updateBotWordLimit.trim()) {
+      const parsedWordLimit = Number(updateBotWordLimit);
+      if (!Number.isInteger(parsedWordLimit)) {
+        addLog("warning", "updateBot", "Word limit must be a whole number");
+        return;
+      }
+      updates.wordLimit = parsedWordLimit;
+    }
+
+    if (!Object.keys(updates).length) {
+      addLog("warning", "updateBot", "Provide at least one field to update");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      addLog("info", "updateBot", `Updating bot ${activeBotId} for vault ${activeVaultId}...`);
+      const response = await vault.updateBot(activeVaultId, activeBotId, updates);
+      setUpdateBotResult(response);
+      setBotDetailsBotId(activeBotId);
+      addLog("success", "updateBot", "Bot updated successfully", response);
+    } catch (error) {
+      addLog("error", "updateBot", "Failed to update bot", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleAddDriveFilesToBot = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!vault) {
@@ -606,6 +688,226 @@ export function UserManagement() {
       );
     } catch (error) {
       addLog("error", "getBotDetails", "Failed to fetch bot details", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGetBotSessions = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!vault) {
+      addLog("warning", "getBotSessions", "Initialize SDK before fetching bot sessions");
+      return;
+    }
+
+    const activeVaultId = vaultId.trim();
+    if (!activeVaultId) {
+      addLog(
+        "warning",
+        "getBotSessions",
+        "Provide Target Vault ID in the dashboard header before fetching bot sessions"
+      );
+      return;
+    }
+
+    const activeBotId = botSessionsBotId.trim();
+    if (!activeBotId) {
+      addLog("warning", "getBotSessions", "Enter a Bot ID before fetching bot sessions");
+      return;
+    }
+
+    const activeSessionId = botSessionsSessionId.trim();
+
+    setLoading(true);
+    try {
+      addLog(
+        "info",
+        "getBotSessions",
+        activeSessionId
+          ? `Fetching messages for session ${activeSessionId} on bot ${activeBotId}...`
+          : `Fetching chat sessions for bot ${activeBotId} in vault ${activeVaultId}...`
+      );
+      const response = await vault.getBotSessions(
+        activeVaultId,
+        activeBotId,
+        activeSessionId || undefined
+      );
+      setBotSessionsResult(response);
+      addLog(
+        "success",
+        "getBotSessions",
+        activeSessionId ? "Session messages fetched" : "Bot sessions fetched",
+        response
+      );
+    } catch (error) {
+      addLog("error", "getBotSessions", "Failed to fetch bot sessions", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteBotSessions = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!vault) {
+      addLog("warning", "deleteBotSessions", "Initialize SDK before deleting bot sessions");
+      return;
+    }
+
+    const activeVaultId = vaultId.trim();
+    if (!activeVaultId) {
+      addLog(
+        "warning",
+        "deleteBotSessions",
+        "Provide Target Vault ID in the dashboard header before deleting bot sessions"
+      );
+      return;
+    }
+
+    const activeBotId = deleteSessionsBotId.trim();
+    if (!activeBotId) {
+      addLog("warning", "deleteBotSessions", "Enter a Bot ID before deleting bot sessions");
+      return;
+    }
+
+    const normalizedSessionIds = deleteSessionIds
+      .split(/[\n,]+/)
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    if (!normalizedSessionIds.length) {
+      addLog("warning", "deleteBotSessions", "Enter at least one Session ID before deleting");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      addLog(
+        "info",
+        "deleteBotSessions",
+        `Deleting ${normalizedSessionIds.length} bot session(s) for bot ${activeBotId}...`
+      );
+      const response = await vault.deleteBotSessions(
+        activeVaultId,
+        activeBotId,
+        normalizedSessionIds.length === 1 ? normalizedSessionIds[0] : normalizedSessionIds
+      );
+      setDeleteSessionsResult(response);
+      addLog("success", "deleteBotSessions", "Bot session(s) deleted", response);
+    } catch (error) {
+      addLog("error", "deleteBotSessions", "Failed to delete bot session(s)", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleExportBotSessions = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!vault) {
+      addLog("warning", "exportBotSessions", "Initialize SDK before exporting bot sessions");
+      return;
+    }
+
+    const activeVaultId = vaultId.trim();
+    if (!activeVaultId) {
+      addLog(
+        "warning",
+        "exportBotSessions",
+        "Provide Target Vault ID in the dashboard header before exporting bot sessions"
+      );
+      return;
+    }
+
+    const activeBotId = exportSessionsBotId.trim();
+    if (!activeBotId) {
+      addLog("warning", "exportBotSessions", "Enter a Bot ID before exporting bot sessions");
+      return;
+    }
+
+    const normalizedSessionIds = exportSessionIds
+      .split(/[\n,]+/)
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    if (!normalizedSessionIds.length) {
+      addLog("warning", "exportBotSessions", "Enter at least one Session ID before exporting");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      addLog(
+        "info",
+        "exportBotSessions",
+        `Exporting ${normalizedSessionIds.length} bot session(s) for bot ${activeBotId} to ${exportSaveOption}...`
+      );
+      const response = await vault.exportBotSessions(
+        activeVaultId,
+        activeBotId,
+        normalizedSessionIds.length === 1 ? normalizedSessionIds[0] : normalizedSessionIds,
+        exportSaveOption,
+        exportTargetBotId.trim() || undefined
+      );
+      setExportSessionsResult(response);
+      addLog("success", "exportBotSessions", "Bot session(s) exported", response);
+    } catch (error) {
+      addLog("error", "exportBotSessions", "Failed to export bot session(s)", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRemoveBotAsset = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!vault) {
+      addLog("warning", "removeBotAsset", "Initialize SDK before removing a bot asset");
+      return;
+    }
+
+    const activeVaultId = vaultId.trim();
+    if (!activeVaultId) {
+      addLog(
+        "warning",
+        "removeBotAsset",
+        "Provide Target Vault ID in the dashboard header before removing a bot asset"
+      );
+      return;
+    }
+
+    const activeBotId = removeAssetBotId.trim();
+    if (!activeBotId) {
+      addLog("warning", "removeBotAsset", "Enter a Bot ID before removing a bot asset");
+      return;
+    }
+
+    const activeAssetId = removeAssetId.trim();
+    if (!activeAssetId) {
+      addLog("warning", "removeBotAsset", "Enter an Asset ID before removing a bot asset");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      addLog(
+        "info",
+        "removeBotAsset",
+        `Removing ${removeAssetType} ${activeAssetId} from bot ${activeBotId}...`
+      );
+      const response = await vault.removeBotAsset(
+        activeVaultId,
+        activeBotId,
+        removeAssetType,
+        activeAssetId,
+        removeAssetType === "file"
+          ? {
+              permanent: removeAssetPermanent,
+              keepTranscript: removeAssetKeepTranscript,
+            }
+          : undefined
+      );
+      setRemoveAssetResult(response);
+      addLog("success", "removeBotAsset", "Bot asset removed", response);
+    } catch (error) {
+      addLog("error", "removeBotAsset", "Failed to remove bot asset", error);
     } finally {
       setLoading(false);
     }
@@ -1015,8 +1317,9 @@ export function UserManagement() {
     <div className="space-y-6">
       <div className="rounded-md border bg-muted/20 p-3 text-sm text-muted-foreground">
         Test platform onboarding and SDK bot setup here: `createVault`, `importVault`, `createBot`,
-        `getBotDetails`, `addDriveFilesToBot`, `addDriveFoldersToBot`, `uploadFilesToBot`, and
-        the new bot chat methods. Bot creation works after the vault is linked to the same
+        `getBotDetails`, `getBotSessions`, `addDriveFilesToBot`, `addDriveFoldersToBot`,
+        `uploadFilesToBot`, and the new bot chat methods. Bot creation works after the vault is
+        linked to the same
         `clientApiKey`, and successful onboarding will auto-fill the shared Target Vault ID for
         the next step.
       </div>
@@ -1155,11 +1458,26 @@ export function UserManagement() {
               <TabsTrigger value="create-bot" className="flex-none">
                 Create Bot
               </TabsTrigger>
+              <TabsTrigger value="update-bot" className="flex-none">
+                Update Bot
+              </TabsTrigger>
               <TabsTrigger value="delete-bot" className="flex-none">
                 Delete Bot
               </TabsTrigger>
               <TabsTrigger value="get-bot-details" className="flex-none">
                 Get Bot Details
+              </TabsTrigger>
+              <TabsTrigger value="get-bot-sessions" className="flex-none">
+                Get Bot Sessions
+              </TabsTrigger>
+              <TabsTrigger value="delete-bot-sessions" className="flex-none">
+                Delete Bot Sessions
+              </TabsTrigger>
+              <TabsTrigger value="export-bot-sessions" className="flex-none">
+                Export Bot Sessions
+              </TabsTrigger>
+              <TabsTrigger value="remove-bot-asset" className="flex-none">
+                Remove Bot Asset
               </TabsTrigger>
               <TabsTrigger value="get-bot-file-text" className="flex-none">
                 Get Bot File Text
@@ -1253,6 +1571,112 @@ export function UserManagement() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="update-bot" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Update Bot</CardTitle>
+              <CardDescription>
+                Runs `updateBot(vaultId, botId, updates)`. Fill only the fields you want to change.
+              </CardDescription>
+            </CardHeader>
+            <form onSubmit={handleUpdateBot}>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="updateBotVaultId">Target Vault ID</Label>
+                  <Input
+                    id="updateBotVaultId"
+                    value={vaultId}
+                    readOnly
+                    placeholder="Set Target Vault ID in the dashboard header"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="updateBotId">Bot ID</Label>
+                  <Input
+                    id="updateBotId"
+                    placeholder="Paste bot ID or create a bot above"
+                    value={updateBotId}
+                    onChange={(e) => setUpdateBotId(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="updateBotName">Bot Name</Label>
+                  <Input
+                    id="updateBotName"
+                    placeholder="Optional new bot name"
+                    value={updateBotName}
+                    onChange={(e) => setUpdateBotName(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="updateBotProfession">Profession</Label>
+                  <Input
+                    id="updateBotProfession"
+                    placeholder="Optional profession"
+                    value={updateBotProfession}
+                    onChange={(e) => setUpdateBotProfession(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="updateBotDescription">Description</Label>
+                  <Textarea
+                    id="updateBotDescription"
+                    placeholder="Optional personality / bot description"
+                    value={updateBotDescription}
+                    onChange={(e) => setUpdateBotDescription(e.target.value)}
+                    rows={4}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="updateBotUseLLMFallback">Use LLM Fallback</Label>
+                  <select
+                    id="updateBotUseLLMFallback"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={updateBotUseLLMFallback}
+                    onChange={(e) => setUpdateBotUseLLMFallback(e.target.value)}
+                  >
+                    <option value="">Leave unchanged</option>
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="updateBotWordLimit">Word Limit</Label>
+                  <Input
+                    id="updateBotWordLimit"
+                    type="number"
+                    min={10}
+                    max={800}
+                    step={1}
+                    placeholder="Optional word limit"
+                    value={updateBotWordLimit}
+                    onChange={(e) => setUpdateBotWordLimit(e.target.value)}
+                  />
+                </div>
+              </CardContent>
+              <CardFooter>
+                <Button type="submit" disabled={loading}>
+                  {loading ? "Updating..." : "Run updateBot"}
+                </Button>
+              </CardFooter>
+            </form>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Latest Response</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <pre className="max-h-56 overflow-auto rounded-md bg-slate-950 p-3 text-xs text-slate-100">
+                {updateBotResult
+                  ? JSON.stringify(updateBotResult, null, 2)
+                  : "No response yet."}
+              </pre>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="get-bot-details" className="space-y-4">
           <Card>
             <CardHeader>
@@ -1302,6 +1726,322 @@ export function UserManagement() {
               <pre className="max-h-56 overflow-auto rounded-md bg-slate-950 p-3 text-xs text-slate-100">
                 {botDetailsResult
                   ? JSON.stringify(botDetailsResult, null, 2)
+                  : "No response yet."}
+              </pre>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="get-bot-sessions" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Get Bot Sessions</CardTitle>
+              <CardDescription>
+                Runs `getBotSessions(vaultId, botId, sessionId?)`. Leave Session ID empty to
+                fetch all sessions for a bot, or provide one to fetch that session&apos;s messages.
+              </CardDescription>
+            </CardHeader>
+            <form onSubmit={handleGetBotSessions}>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="getBotSessionsVaultId">Target Vault ID</Label>
+                  <Input
+                    id="getBotSessionsVaultId"
+                    value={vaultId}
+                    readOnly
+                    placeholder="Set Target Vault ID in the dashboard header"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="getBotSessionsBotId">Bot ID</Label>
+                  <Input
+                    id="getBotSessionsBotId"
+                    placeholder="Paste bot ID or create a bot above"
+                    value={botSessionsBotId}
+                    onChange={(e) => setBotSessionsBotId(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="getBotSessionsSessionId">Session ID</Label>
+                  <Input
+                    id="getBotSessionsSessionId"
+                    placeholder="Optional: leave empty to fetch all sessions"
+                    value={botSessionsSessionId}
+                    onChange={(e) => setBotSessionsSessionId(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Add a session ID only when you want the full message history for one chat.
+                  </p>
+                </div>
+              </CardContent>
+              <CardFooter>
+                <Button type="submit" disabled={loading}>
+                  {loading ? "Fetching..." : "Run getBotSessions"}
+                </Button>
+              </CardFooter>
+            </form>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Latest Response</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <pre className="max-h-56 overflow-auto rounded-md bg-slate-950 p-3 text-xs text-slate-100">
+                {botSessionsResult
+                  ? JSON.stringify(botSessionsResult, null, 2)
+                  : "No response yet."}
+              </pre>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="delete-bot-sessions" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Delete Bot Sessions</CardTitle>
+              <CardDescription>
+                Runs `deleteBotSessions(vaultId, botId, sessionIds)`. You can paste one Session
+                ID or several separated by commas or new lines.
+              </CardDescription>
+            </CardHeader>
+            <form onSubmit={handleDeleteBotSessions}>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="deleteBotSessionsVaultId">Target Vault ID</Label>
+                  <Input
+                    id="deleteBotSessionsVaultId"
+                    value={vaultId}
+                    readOnly
+                    placeholder="Set Target Vault ID in the dashboard header"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="deleteBotSessionsBotId">Bot ID</Label>
+                  <Input
+                    id="deleteBotSessionsBotId"
+                    placeholder="Paste bot ID"
+                    value={deleteSessionsBotId}
+                    onChange={(e) => setDeleteSessionsBotId(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="deleteBotSessionsIds">Session ID(s)</Label>
+                  <Textarea
+                    id="deleteBotSessionsIds"
+                    placeholder={"session-id-one\nsession-id-two"}
+                    value={deleteSessionIds}
+                    onChange={(e) => setDeleteSessionIds(e.target.value)}
+                    rows={4}
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Separate multiple session IDs with commas or new lines.
+                  </p>
+                </div>
+              </CardContent>
+              <CardFooter>
+                <Button type="submit" disabled={loading} variant="destructive">
+                  {loading ? "Deleting..." : "Run deleteBotSessions"}
+                </Button>
+              </CardFooter>
+            </form>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Latest Response</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <pre className="max-h-56 overflow-auto rounded-md bg-slate-950 p-3 text-xs text-slate-100">
+                {deleteSessionsResult
+                  ? JSON.stringify(deleteSessionsResult, null, 2)
+                  : "No response yet."}
+              </pre>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="export-bot-sessions" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Export Bot Sessions</CardTitle>
+              <CardDescription>
+                Runs `exportBotSessions(vaultId, botId, sessionIds, saveOption, targetBotId?)`.
+                You can paste one Session ID or several separated by commas or new lines.
+              </CardDescription>
+            </CardHeader>
+            <form onSubmit={handleExportBotSessions}>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="exportBotSessionsVaultId">Target Vault ID</Label>
+                  <Input
+                    id="exportBotSessionsVaultId"
+                    value={vaultId}
+                    readOnly
+                    placeholder="Set Target Vault ID in the dashboard header"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="exportBotSessionsBotId">Bot ID</Label>
+                  <Input
+                    id="exportBotSessionsBotId"
+                    placeholder="Paste bot ID"
+                    value={exportSessionsBotId}
+                    onChange={(e) => setExportSessionsBotId(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="exportBotSessionsIds">Session ID(s)</Label>
+                  <Textarea
+                    id="exportBotSessionsIds"
+                    placeholder={"session-id-one\nsession-id-two"}
+                    value={exportSessionIds}
+                    onChange={(e) => setExportSessionIds(e.target.value)}
+                    rows={4}
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Separate multiple session IDs with commas or new lines.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="exportBotSessionsSaveOption">Save Option</Label>
+                  <select
+                    id="exportBotSessionsSaveOption"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={exportSaveOption}
+                    onChange={(e) => setExportSaveOption(e.target.value)}
+                  >
+                    <option value="drive">drive</option>
+                    <option value="brain">brain</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="exportBotSessionsTargetBotId">Target Bot ID</Label>
+                  <Input
+                    id="exportBotSessionsTargetBotId"
+                    placeholder="Optional: leave empty to export into the same bot when using brain"
+                    value={exportTargetBotId}
+                    onChange={(e) => setExportTargetBotId(e.target.value)}
+                  />
+                </div>
+              </CardContent>
+              <CardFooter>
+                <Button type="submit" disabled={loading}>
+                  {loading ? "Exporting..." : "Run exportBotSessions"}
+                </Button>
+              </CardFooter>
+            </form>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Latest Response</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <pre className="max-h-56 overflow-auto rounded-md bg-slate-950 p-3 text-xs text-slate-100">
+                {exportSessionsResult
+                  ? JSON.stringify(exportSessionsResult, null, 2)
+                  : "No response yet."}
+              </pre>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="remove-bot-asset" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Remove Bot Asset</CardTitle>
+              <CardDescription>
+                Runs `removeBotAsset(vaultId, botId, assetType, assetId)` for either a bot file
+                or a linked storage folder.
+              </CardDescription>
+            </CardHeader>
+            <form onSubmit={handleRemoveBotAsset}>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="removeBotAssetVaultId">Target Vault ID</Label>
+                  <Input
+                    id="removeBotAssetVaultId"
+                    value={vaultId}
+                    readOnly
+                    placeholder="Set Target Vault ID in the dashboard header"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="removeBotAssetBotId">Bot ID</Label>
+                  <Input
+                    id="removeBotAssetBotId"
+                    placeholder="Paste bot ID"
+                    value={removeAssetBotId}
+                    onChange={(e) => setRemoveAssetBotId(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="removeBotAssetType">Asset Type</Label>
+                  <select
+                    id="removeBotAssetType"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={removeAssetType}
+                    onChange={(e) => setRemoveAssetType(e.target.value)}
+                  >
+                    <option value="file">file</option>
+                    <option value="folder">folder</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="removeBotAssetId">Asset ID</Label>
+                  <Input
+                    id="removeBotAssetId"
+                    placeholder="Paste file ID or folder ID"
+                    value={removeAssetId}
+                    onChange={(e) => setRemoveAssetId(e.target.value)}
+                    required
+                  />
+                </div>
+                {removeAssetType === "file" ? (
+                  <div className="space-y-3 rounded-md border p-3">
+                    <Label className="text-sm">File Options</Label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={removeAssetPermanent}
+                        onChange={(e) => setRemoveAssetPermanent(e.target.checked)}
+                      />
+                      Permanently delete the drive file too
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={removeAssetKeepTranscript}
+                        onChange={(e) => setRemoveAssetKeepTranscript(e.target.checked)}
+                      />
+                      Keep the transcript after removing the media file
+                    </label>
+                  </div>
+                ) : null}
+              </CardContent>
+              <CardFooter>
+                <Button type="submit" disabled={loading} variant="destructive">
+                  {loading ? "Removing..." : "Run removeBotAsset"}
+                </Button>
+              </CardFooter>
+            </form>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Latest Response</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <pre className="max-h-56 overflow-auto rounded-md bg-slate-950 p-3 text-xs text-slate-100">
+                {removeAssetResult
+                  ? JSON.stringify(removeAssetResult, null, 2)
                   : "No response yet."}
               </pre>
             </CardContent>
@@ -1705,9 +2445,10 @@ export function UserManagement() {
             <CardHeader>
               <CardTitle>Bot Chat</CardTitle>
               <CardDescription>
-                Test `createVaultLaunchToken`, `redeemVaultLaunchToken`, `connectToBotChat`,
-                `joinBotChat`, `sendBotChatMessage`, `sendBotChatTyping`, and `disconnectBotChat`.
-                If you leave token fields empty, `connectToBotChat` will mint and redeem them automatically.
+                Test `getBotSessions`, `createVaultLaunchToken`, `redeemVaultLaunchToken`,
+                `connectToBotChat`, `joinBotChat`, `sendBotChatMessage`, `sendBotChatTyping`,
+                and `disconnectBotChat`. If you leave token fields empty, `connectToBotChat` will
+                mint and redeem them automatically.
               </CardDescription>
             </CardHeader>
             <div className="px-6 pb-2 text-xs text-muted-foreground">
