@@ -68,6 +68,12 @@ export function UserManagement() {
   const [botFileActionBotId, setBotFileActionBotId] = useState("");
   const [botFileActionFileId, setBotFileActionFileId] = useState("");
   const [botFileActionResult, setBotFileActionResult] = useState<unknown>(null);
+  const [quoteBotId, setQuoteBotId] = useState("");
+  const [quoteFilesJson, setQuoteFilesJson] = useState(
+    '[\n  {\n    "name": "call.mp3",\n    "size": 1048576,\n    "fileId": "file-123"\n  }\n]'
+  );
+  const [quoteFolderIds, setQuoteFolderIds] = useState("");
+  const [quoteTranscriptionResult, setQuoteTranscriptionResult] = useState<unknown>(null);
   const [uploadBotId, setUploadBotId] = useState("");
   const [driveFileBotId, setDriveFileBotId] = useState("");
   const [driveFileIds, setDriveFileIds] = useState("");
@@ -581,6 +587,79 @@ export function UserManagement() {
       addLog("success", "uploadFilesToBot", "Bot files upload started", response);
     } catch (error) {
       addLog("error", "uploadFilesToBot", "Failed to upload bot files", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleQuoteTranscription = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!vault) {
+      addLog("warning", "quoteTranscription", "Initialize SDK before quoting transcription");
+      return;
+    }
+
+    const activeVaultId = vaultId.trim();
+    if (!activeVaultId) {
+      addLog(
+        "warning",
+        "quoteTranscription",
+        "Provide Target Vault ID in the dashboard header before requesting a quote"
+      );
+      return;
+    }
+
+    const activeBotId = quoteBotId.trim();
+    if (!activeBotId) {
+      addLog("warning", "quoteTranscription", "Enter a Bot ID before requesting a quote");
+      return;
+    }
+
+    let parsedFiles: Array<Record<string, unknown>> = [];
+    const trimmedJson = quoteFilesJson.trim();
+    if (trimmedJson) {
+      try {
+        const parsed = JSON.parse(trimmedJson);
+        if (!Array.isArray(parsed)) {
+          addLog("warning", "quoteTranscription", "Files JSON must be an array");
+          return;
+        }
+        parsedFiles = parsed;
+      } catch (error) {
+        addLog("warning", "quoteTranscription", "Files JSON must be valid JSON", error);
+        return;
+      }
+    }
+
+    const normalizedFolderIds = Array.from(
+      new Set(
+        quoteFolderIds
+          .split(/[\n,]+/)
+          .map((value) => value.trim())
+          .filter(Boolean)
+      )
+    );
+
+    if (!parsedFiles.length && !normalizedFolderIds.length) {
+      addLog(
+        "warning",
+        "quoteTranscription",
+        "Provide at least one file entry or folder ID before requesting a quote"
+      );
+      return;
+    }
+
+    setLoading(true);
+    try {
+      addLog("info", "quoteTranscription", `Requesting transcription quote for bot ${activeBotId}...`);
+      const response = await vault.quoteTranscription(activeVaultId, activeBotId, {
+        files: parsedFiles,
+        folderIds: normalizedFolderIds,
+      });
+      setQuoteTranscriptionResult(response);
+      addLog("success", "quoteTranscription", "Transcription quote fetched", response);
+    } catch (error) {
+      addLog("error", "quoteTranscription", "Failed to fetch transcription quote", error);
     } finally {
       setLoading(false);
     }
@@ -1485,6 +1564,9 @@ export function UserManagement() {
               <TabsTrigger value="bot-file-actions" className="flex-none">
                 Bot File Actions
               </TabsTrigger>
+              <TabsTrigger value="quote-transcription" className="flex-none">
+                Quote Transcription
+              </TabsTrigger>
               <TabsTrigger value="add-drive-file" className="flex-none">
                 Add Storage File
               </TabsTrigger>
@@ -2229,6 +2311,85 @@ export function UserManagement() {
               <pre className="max-h-56 overflow-auto rounded-md bg-slate-950 p-3 text-xs text-slate-100">
                 {botFileActionResult
                   ? JSON.stringify(botFileActionResult, null, 2)
+                  : "No response yet."}
+              </pre>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="quote-transcription" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Quote Transcription</CardTitle>
+              <CardDescription>
+                Runs `quoteTranscription(vaultId, botId, payload)` to estimate Twin Points for
+                media files or linked folders before ingestion starts.
+              </CardDescription>
+            </CardHeader>
+            <form onSubmit={handleQuoteTranscription}>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="quoteVaultId">Target Vault ID</Label>
+                  <Input
+                    id="quoteVaultId"
+                    value={vaultId}
+                    readOnly
+                    placeholder="Set Target Vault ID in the dashboard header"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="quoteBotId">Bot ID</Label>
+                  <Input
+                    id="quoteBotId"
+                    placeholder="Paste bot ID or create a bot above"
+                    value={quoteBotId}
+                    onChange={(e) => setQuoteBotId(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="quoteFilesJson">Files JSON</Label>
+                  <Textarea
+                    id="quoteFilesJson"
+                    value={quoteFilesJson}
+                    onChange={(e) => setQuoteFilesJson(e.target.value)}
+                    rows={7}
+                    placeholder='[{"name":"call.mp3","size":1048576,"fileId":"file-123"}]'
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Optional. Each entry can include `name`, `size`, `fileId`, and `durationSeconds`.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="quoteFolderIds">Storage Folder ID(s)</Label>
+                  <Textarea
+                    id="quoteFolderIds"
+                    placeholder={"Optional folder ID\nfolder-id-two"}
+                    value={quoteFolderIds}
+                    onChange={(e) => setQuoteFolderIds(e.target.value)}
+                    rows={4}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Optional. Separate multiple folder IDs with commas or new lines.
+                  </p>
+                </div>
+              </CardContent>
+              <CardFooter>
+                <Button type="submit" disabled={loading}>
+                  {loading ? "Quoting..." : "Run quoteTranscription"}
+                </Button>
+              </CardFooter>
+            </form>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Latest Response</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <pre className="max-h-56 overflow-auto rounded-md bg-slate-950 p-3 text-xs text-slate-100">
+                {quoteTranscriptionResult
+                  ? JSON.stringify(quoteTranscriptionResult, null, 2)
                   : "No response yet."}
               </pre>
             </CardContent>
