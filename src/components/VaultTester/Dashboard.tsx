@@ -62,6 +62,8 @@ const methodGroups = [
     methods: [
       "createVault",
       "importVault",
+      "getWalletInfo",
+      "getTransactionHistory",
       "createBot",
       "getBotDetails",
       "getBotSessions",
@@ -91,9 +93,9 @@ export function Dashboard() {
   const vaultId = useSettingsStore((state) => state.vaultId);
   const setVaultId = useSettingsStore((state) => state.setVaultId);
   const [showLogs, setShowLogs] = useState(true);
-  const [activeView, setActiveView] = useState<"files" | "storage" | "users" | "settings">(
-    "files"
-  );
+  const [activeView, setActiveView] = useState<
+    "files" | "storage" | "users" | "settings"
+  >("files");
 
   const methodCount = useMemo(
     () => methodGroups.reduce((count, group) => count + group.methods.length, 0),

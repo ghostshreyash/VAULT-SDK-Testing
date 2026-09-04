@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSettingsStore } from "@/store/settingsStore";
+import { WalletPanel } from "./WalletPanel";
 
 export function UserManagement() {
   const { vault, addLog } = useVault();
@@ -1408,6 +1409,9 @@ export function UserManagement() {
           <TabsTrigger value="platform" className="flex-none">
             Platform
           </TabsTrigger>
+          <TabsTrigger value="wallet" className="flex-none">
+            Wallet
+          </TabsTrigger>
           <TabsTrigger value="bot" className="flex-none">
             Bot
           </TabsTrigger>
@@ -1529,6 +1533,10 @@ export function UserManagement() {
         </TabsContent>
 
           </Tabs>
+        </TabsContent>
+
+        <TabsContent value="wallet" className="space-y-4">
+          <WalletPanel />
         </TabsContent>
 
         <TabsContent value="bot" className="space-y-4">

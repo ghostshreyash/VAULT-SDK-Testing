@@ -39,7 +39,6 @@ interface SubscriptionsState {
   upcoming?: Record<string, unknown>;
 }
 
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -425,9 +424,9 @@ export function StoragePanel() {
       <div className="space-y-6">
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
           <div className="rounded-md border bg-muted/20 p-3 text-sm text-muted-foreground">
-            Run this section to validate billing endpoints: `getStorageDetails`, `getAllPlans`,
-            `buyPlan`, `getSubscriptions`, `cancelSubscription`, `createUpcomingPlan`, and
-            `cancelUpcomingPlan`.
+            Run this section to validate storage and billing endpoints: `getStorageDetails`,
+            `getAllPlans`, `buyPlan`, `getSubscriptions`, `cancelSubscription`,
+            `createUpcomingPlan`, and `cancelUpcomingPlan`.
           </div>
           <Button
             onClick={() => {
