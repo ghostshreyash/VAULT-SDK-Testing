@@ -89,6 +89,8 @@ export const VaultProvider = ({ children }: { children: ReactNode }) => {
       toast.error(`${method}: ${displayMessage}`);
     } else if (type === "success") {
       toast.success(`${method}: ${displayMessage}`);
+    } else if (type === "warning") {
+      toast.warning(`${method}: ${displayMessage}`);
     }
   };
 

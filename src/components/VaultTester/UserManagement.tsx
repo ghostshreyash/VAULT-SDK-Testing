@@ -1,3 +1,4 @@
+import { BotLlmPanel, LlmProvidersPanel } from "./BotLlmPanel";
 import { useEffect, useState } from "react";
 import { useVault } from "@/context/VaultContext";
 import {
@@ -52,6 +53,7 @@ export function UserManagement() {
   const [deleteSessionsBotId, setDeleteSessionsBotId] = useState("");
   const [deleteSessionIds, setDeleteSessionIds] = useState("");
   const [deleteSessionsResult, setDeleteSessionsResult] = useState<unknown>(null);
+  const [deleteSessionsSummary, setDeleteSessionsSummary] = useState("");
   const [exportSessionsBotId, setExportSessionsBotId] = useState("");
   const [exportSessionIds, setExportSessionIds] = useState("");
   const [exportSaveOption, setExportSaveOption] = useState("drive");
@@ -853,6 +855,7 @@ export function UserManagement() {
       .split(/[\n,]+/)
       .map((value) => value.trim())
       .filter(Boolean);
+    const requestedSessionCount = normalizedSessionIds.length;
 
     if (!normalizedSessionIds.length) {
       addLog("warning", "deleteBotSessions", "Enter at least one Session ID before deleting");
@@ -860,6 +863,7 @@ export function UserManagement() {
     }
 
     setLoading(true);
+    setDeleteSessionsSummary("");
     try {
       addLog(
         "info",
@@ -872,7 +876,22 @@ export function UserManagement() {
         normalizedSessionIds.length === 1 ? normalizedSessionIds[0] : normalizedSessionIds
       );
       setDeleteSessionsResult(response);
-      addLog("success", "deleteBotSessions", "Bot session(s) deleted", response);
+      const deletedCount =
+        (typeof response?.data?.deletedCount === "number" && response.data.deletedCount) ||
+        (typeof response?.deletedCount === "number" && response.deletedCount) ||
+        (typeof response?.data?.data?.deletedCount === "number" && response.data.data.deletedCount) ||
+        (typeof response?.data?.result?.deletedCount === "number" && response.data.result.deletedCount) ||
+        (Array.isArray(response?.data?.deletedSessionIds) && response.data.deletedSessionIds.length) ||
+        (Array.isArray(response?.deletedSessionIds) && response.deletedSessionIds.length) ||
+        0;
+      const deletionMessage = `${deletedCount} of ${requestedSessionCount} session(s) deleted`;
+      setDeleteSessionsSummary(deletionMessage);
+      addLog(
+        deletedCount < requestedSessionCount ? "warning" : "success",
+        "deleteBotSessions",
+        deletionMessage,
+        response
+      );
     } catch (error) {
       addLog("error", "deleteBotSessions", "Failed to delete bot session(s)", error);
     } finally {
@@ -1415,6 +1434,9 @@ export function UserManagement() {
           <TabsTrigger value="bot" className="flex-none">
             Bot
           </TabsTrigger>
+          <TabsTrigger value="bot-llm" className="flex-none">
+            Bot LLM
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="platform" className="space-y-4">
@@ -1537,6 +1559,27 @@ export function UserManagement() {
 
         <TabsContent value="wallet" className="space-y-4">
           <WalletPanel />
+        </TabsContent>
+
+        <TabsContent value="bot-llm" className="space-y-4">
+          <Tabs defaultValue="set-bot-llm" className="space-y-4">
+            <TabsList className="h-auto w-full flex-wrap justify-start gap-1">
+              <TabsTrigger value="set-bot-llm" className="flex-none">
+                Set LLM
+              </TabsTrigger>
+              <TabsTrigger value="get-llm-providers" className="flex-none">
+                Get LLM Providers
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="set-bot-llm" className="space-y-4">
+              <BotLlmPanel />
+            </TabsContent>
+
+            <TabsContent value="get-llm-providers" className="space-y-4">
+              <LlmProvidersPanel />
+            </TabsContent>
+          </Tabs>
         </TabsContent>
 
         <TabsContent value="bot" className="space-y-4">
@@ -1945,6 +1988,11 @@ export function UserManagement() {
               <CardTitle className="text-base">Latest Response</CardTitle>
             </CardHeader>
             <CardContent>
+              {deleteSessionsSummary ? (
+                <p className="mb-2 text-sm font-medium text-foreground">
+                  {deleteSessionsSummary}
+                </p>
+              ) : null}
               <pre className="max-h-56 overflow-auto rounded-md bg-slate-950 p-3 text-xs text-slate-100">
                 {deleteSessionsResult
                   ? JSON.stringify(deleteSessionsResult, null, 2)
