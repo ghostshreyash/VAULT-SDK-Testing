@@ -393,23 +393,13 @@ export function UserManagement() {
       return;
     }
 
-    const activeVaultId = vaultId.trim();
-    if (!activeVaultId) {
-      addLog(
-        "warning",
-        "createBot",
-        "Provide Target Vault ID in the dashboard header before creating a bot"
-      );
-      return;
-    }
-
     setLoading(true);
     try {
-      addLog("info", "createBot", `Creating bot '${botName}' for vault ${activeVaultId}...`);
-      const response = await vault.createBot(activeVaultId, {
-        name: botName.trim(),
-        profession: botProfession.trim() || undefined,
-        description: botDescription.trim() || undefined,
+      addLog("info", "createBot", `Creating bot '${botName}' for vault ${vaultId}...`);
+      const response = await vault.createBot(vaultId, {
+        name: botName,
+        profession: botProfession,
+        description: botDescription,
       });
       setCreateBotResult(response);
       const createdBotId = extractBotId(response);
@@ -1616,7 +1606,6 @@ export function UserManagement() {
                     placeholder="Support Bot"
                     value={botName}
                     onChange={(e) => setBotName(e.target.value)}
-                    required
                   />
                 </div>
                 <div className="space-y-2">
